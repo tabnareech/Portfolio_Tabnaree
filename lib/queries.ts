@@ -1,24 +1,16 @@
 import { cache } from 'react'
 import { all, one, scalar } from './db'
-import type {
-  Profile, Domain, Indicator, Work, WorkImage, WorkFile, Agreement,
-  PaDetail, PaChallenge, SelfDev, Award, ItemImage, ItemFile, Education, CareerPath,
-  OnePageReport, ReportKind,
-} from './types'
+import type { Profile, Education, CareerPath, OnePageReport, ReportKind } from './types'
 
 /* ---------------- โปรไฟล์ / ประวัติ ---------------- */
 
-/**
- * โปรไฟล์ครู — คืน null ถ้าฐานข้อมูลยังไม่พร้อม
- * ต้องกันไว้ เพราะ layout เรียกใช้ทุกหน้า ถ้าโยน error ตอนยังไม่ติดตั้งเว็บจะ 500 ทั้งเว็บ
- */
 export const getProfile = cache(async (): Promise<Profile | null> => {
-  try { return await one<Profile>('SELECT * FROM teacher_profile WHERE id = 1') }
+  try { return await one<Profile>('SELECT * FROM profile WHERE id = 1') }
   catch { return null }
 })
 
 export const getEducations = () =>
-  all<Education>('SELECT * FROM educations WHERE deleted_at IS NULL ORDER BY sort_order, year_th DESC')
+  all<Education>('SELECT * FROM educations WHERE deleted_at IS NULL ORDER BY sort_order, year_be DESC')
 
 export const getCareerPaths = () =>
   all<CareerPath>('SELECT * FROM career_paths WHERE deleted_at IS NULL ORDER BY sort_order')
@@ -28,48 +20,69 @@ export const getSetting = cache(async (key: string): Promise<string | null> => {
   catch { return null }
 })
 
-/* ---------------- ด้าน / ตัวชี้วัด ---------------- */
+/* ---------------- อ้างอิง: ระดับ, คุณลักษณะ, ประเภทงาน ---------------- */
 
-export const getDomains = cache(() =>
-  all<Domain>('SELECT * FROM domains ORDER BY code'))
+export const getLevels = cache(() =>
+  all<{ code: string; name_th: string; short_name: string; icon: string; color: string }>(
+    'SELECT * FROM levels ORDER BY sort_order'
+  ))
 
-export const getIndicators = cache(() =>
-  all<Indicator>(`SELECT i.*, d.code AS domain_code, d.name AS domain_name
-                  FROM indicators i JOIN domains d ON d.id = i.domain_id
-                  ORDER BY d.code, i.sort_order`))
+export const getAttributes = cache(() =>
+  all<{ code: string; name_th: string; short_name: string; icon: string; color: string }>(
+    'SELECT * FROM attributes ORDER BY sort_order'
+  ))
 
-export const getIndicator = (id: number) =>
-  one<Indicator>(`SELECT i.*, d.code AS domain_code, d.name AS domain_name
-                  FROM indicators i JOIN domains d ON d.id = i.domain_id WHERE i.id = ?`, [id])
+export const getWorkTypes = cache(() =>
+  all<{ id: number; slug: string; name: string }>(
+    'SELECT * FROM work_types ORDER BY sort_order, id'
+  ))
 
-/**
- * จำนวนผลงานของแต่ละตัวชี้วัด — ใช้โชว์ตัวเลขบนการ์ด
- * includeDraft = true สำหรับหลังบ้าน (ครูต้องเห็นฉบับร่างของตัวเองด้วย)
- */
-export async function getWorkCountByIndicator(includeDraft = false): Promise<Map<number, number>> {
-  const rows = await all<{ indicator_id: number; n: number }>(
-    `SELECT indicator_id, COUNT(*) AS n FROM works
-     WHERE deleted_at IS NULL ${includeDraft ? '' : "AND status = 'published'"}
-     GROUP BY indicator_id`)
-  return new Map(rows.map((r) => [Number(r.indicator_id), Number(r.n)]))
+/* ---------------- ผลงาน / รางวัล (Works) ---------------- */
+
+export interface Work {
+  id: number
+  slug: string
+  title: string
+  summary: string
+  content: string | null
+  level_code: string
+  level_name?: string
+  level_icon?: string
+  awarded_by: string
+  awarded_person: string
+  cert_no: string
+  role: string
+  work_date: string | null
+  year_be: number | null
+  location: string
+  cover_source: 'drive' | 'static' | null
+  cover_ref: string | null
+  video_url: string
+  link_url: string
+  link_label: string
+  view_count: number
+  is_featured: number
+  status: 'draft' | 'published'
+  created_at: string
 }
 
-/* ---------------- ผลงาน ---------------- */
-
-const WORK_SELECT = `SELECT w.*,
-                     i.code AS indicator_code,
-                     i.name AS indicator_name,
-                     d.code AS domain_code
-                     FROM works w
-                     LEFT JOIN indicators i ON i.id = w.indicator_id
-                     LEFT JOIN domains d ON d.id = i.domain_id`
+const WORK_BASE_SQL = `
+  SELECT w.*, 
+         l.name_th AS level_name, 
+         l.icon AS level_icon,
+         l.color AS level_color,
+         (SELECT group_concat(a.code) FROM work_attributes wa JOIN attributes a ON a.code = wa.attribute_code WHERE wa.work_id = w.id) AS attr_codes,
+         (SELECT group_concat(a.name_th) FROM work_attributes wa JOIN attributes a ON a.code = wa.attribute_code WHERE wa.work_id = w.id) AS attr_names,
+         (SELECT group_concat(t.name) FROM work_type_links wtl JOIN work_types t ON t.id = wtl.work_type_id WHERE wtl.work_id = w.id) AS type_names
+  FROM works w
+  JOIN levels l ON l.code = w.level_code
+`
 
 export interface WorkFilter {
-  indicatorId?: number
-  domainCode?: number
-  workLevel?: string
-  workType?: string
-  criterion?: string
+  level?: string
+  attr?: string | string[]
+  type?: string
+  year?: number
   q?: string
   featuredOnly?: boolean
   limit?: number
@@ -79,529 +92,121 @@ export interface WorkFilter {
 export async function getWorks(f: WorkFilter = {}): Promise<Work[]> {
   const where: string[] = ["w.deleted_at IS NULL", "w.status = 'published'"]
   const args: (string | number)[] = []
-  if (f.indicatorId) { where.push('w.indicator_id = ?'); args.push(f.indicatorId) }
-  if (f.domainCode) { where.push('d.code = ?'); args.push(f.domainCode) }
+
+  if (f.level) { where.push('w.level_code = ?'); args.push(f.level) }
+  if (f.year) { where.push('w.year_be = ?'); args.push(f.year) }
   if (f.featuredOnly) { where.push('w.is_featured = 1') }
+  
   if (f.q) {
-    where.push('(w.title LIKE ? OR w.summary LIKE ? OR w.tags LIKE ?)')
+    where.push('(w.title LIKE ? OR w.summary LIKE ? OR w.awarded_by LIKE ?)')
     const like = `%${f.q}%`; args.push(like, like, like)
   }
-  let sql = `${WORK_SELECT} WHERE ${where.join(' AND ')} ORDER BY w.work_date DESC, w.id DESC`
+
+  if (f.type) {
+    where.push(`EXISTS (SELECT 1 FROM work_type_links wtl JOIN work_types t ON t.id = wtl.work_type_id WHERE wtl.work_id = w.id AND t.slug = ?)`)
+    args.push(f.type)
+  }
+
+  const attrs = Array.isArray(f.attr) ? f.attr : f.attr ? [f.attr] : []
+  for (const attrCode of attrs) {
+    where.push(`EXISTS (SELECT 1 FROM work_attributes wa WHERE wa.work_id = w.id AND wa.attribute_code = ?)`)
+    args.push(attrCode)
+  }
+
+  let sql = `${WORK_BASE_SQL} WHERE ${where.join(' AND ')} ORDER BY l.sort_order ASC, w.work_date DESC, w.id DESC`
   if (f.limit) { sql += ' LIMIT ?'; args.push(f.limit) }
   if (f.offset) { sql += ' OFFSET ?'; args.push(f.offset) }
+
   return all<Work>(sql, args)
 }
 
-export async function countWorks(f: WorkFilter = {}): Promise<number> {
-  const where: string[] = ["w.deleted_at IS NULL", "w.status = 'published'"]
-  const args: (string | number)[] = []
-  if (f.indicatorId) { where.push('w.indicator_id = ?'); args.push(f.indicatorId) }
-  if (f.domainCode) { where.push('d.code = ?'); args.push(f.domainCode) }
-  if (f.q) {
-    where.push('(w.title LIKE ? OR w.summary LIKE ? OR w.tags LIKE ?)')
-    const like = `%${f.q}%`; args.push(like, like, like)
-  }
-  const n = await scalar<number>(
-    `SELECT COUNT(*) FROM works w
-     JOIN indicators i ON i.id = w.indicator_id
-     JOIN domains d ON d.id = i.domain_id
-     WHERE ${where.join(' AND ')}`, args)
-  return Number(n ?? 0)
-}
-
 export const getWorkBySlug = (slug: string) =>
-  one<Work>(`${WORK_SELECT} WHERE w.slug = ? AND w.deleted_at IS NULL`, [slug])
+  one<Work>(`${WORK_BASE_SQL} WHERE w.slug = ? AND w.deleted_at IS NULL`, [slug])
 
 export const getWorkImages = (workId: number) =>
-  all<WorkImage>('SELECT * FROM work_images WHERE work_id = ? ORDER BY sort_order, id', [workId])
+  all<{ id: number; source: string; ref: string; caption: string; sort_order: number }>(
+    'SELECT * FROM work_images WHERE work_id = ? ORDER BY sort_order, id', [workId]
+  )
 
 export const getWorkFiles = (workId: number) =>
-  all<WorkFile>('SELECT * FROM work_files WHERE work_id = ? ORDER BY sort_order, id', [workId])
+  all<{ id: number; source: string; ref: string; original_name: string; mime_type: string; size_bytes: number }>(
+    'SELECT * FROM work_files WHERE work_id = ? ORDER BY sort_order, id', [workId]
+  )
 
-export const getAcademicYears = async () =>
-  (await all<{ y: string }>(
-    `SELECT DISTINCT strftime('%Y', work_date) AS y
-     FROM works
-     WHERE deleted_at IS NULL
-       AND status = 'published'
-       AND work_date IS NOT NULL
-     ORDER BY y DESC`
+export const getWorkYears = async () =>
+  (await all<{ y: number }>(
+    `SELECT DISTINCT year_be AS y FROM works WHERE deleted_at IS NULL AND status = 'published' AND year_be IS NOT NULL ORDER BY y DESC`
   )).map((r) => Number(r.y))
 
-/** ผลงานอื่นในตัวชี้วัดเดียวกัน */
-export const getRelatedWorks = (indicatorId: number, exceptId: number, limit = 4) =>
-  all<Work>(`${WORK_SELECT} WHERE w.indicator_id = ? AND w.id <> ?
-             AND w.deleted_at IS NULL AND w.status = 'published'
-             ORDER BY w.work_date DESC LIMIT ?`, [indicatorId, exceptId, limit])
 
-/* ---------------- ข้อตกลง PA ---------------- */
+/* ---------------- ข่าวประชาสัมพันธ์ (News) ---------------- */
 
-export const getAgreements = cache(() =>
-  all<Agreement & { detail_count: number; challenge_count: number }>(
-    `SELECT a.*,
-            (SELECT COUNT(*) FROM pa_details pd WHERE pd.agreement_id = a.id)    AS detail_count,
-            (SELECT COUNT(*) FROM pa_challenges pc WHERE pc.agreement_id = a.id) AS challenge_count
-     FROM pa_agreements a
-     WHERE a.deleted_at IS NULL
-     ORDER BY a.fiscal_year DESC`))
-
-export const getAgreement = (fiscalYear: number) =>
-  one<Agreement>('SELECT * FROM pa_agreements WHERE fiscal_year = ? AND deleted_at IS NULL', [fiscalYear])
-
-export const getAgreementById = (id: number) =>
-  one<Agreement>('SELECT * FROM pa_agreements WHERE id = ? AND deleted_at IS NULL', [id])
-
-export const getPaDetails = (agreementId: number) =>
-  all<PaDetail>(`SELECT p.*, i.code AS indicator_code, i.name AS indicator_name, d.code AS domain_code
-                 FROM pa_details p
-                 JOIN indicators i ON i.id = p.indicator_id
-                 JOIN domains d ON d.id = i.domain_id
-                 WHERE p.agreement_id = ? ORDER BY d.code, i.sort_order`, [agreementId])
-
-/** ประเด็นท้าทายทั้งหมดของข้อตกลงปีนั้น — 1 ปีมีได้หลายข้อ */
-export const getPaChallenges = (agreementId: number) =>
-  all<PaChallenge>('SELECT * FROM pa_challenges WHERE agreement_id = ? ORDER BY id', [agreementId])
-
-export const getPaChallenge = (agreementId: number) =>
-  one<PaChallenge>('SELECT * FROM pa_challenges WHERE agreement_id = ? ORDER BY id', [agreementId])
-
-/* ---------------- การพัฒนาตนเอง / รางวัล ---------------- */
-
-export const getSelfDevs = (fiscalYear?: number) =>
-  all<SelfDev>(
-    `SELECT * FROM self_developments WHERE deleted_at IS NULL
-     ${fiscalYear ? 'AND fiscal_year = ?' : ''}
-     ORDER BY start_date DESC, id DESC`, fiscalYear ? [fiscalYear] : [])
-
-export const getSelfDev = (id: number) =>
-  one<SelfDev>('SELECT * FROM self_developments WHERE id = ? AND deleted_at IS NULL', [id])
-
-export const getSelfDevYears = async () =>
-  (await all<{ y: number }>(
-    `SELECT DISTINCT fiscal_year AS y FROM self_developments
-     WHERE deleted_at IS NULL ORDER BY y DESC`)).map((r) => Number(r.y))
-
-export const getAwards = () =>
-  all<Award>('SELECT * FROM awards WHERE deleted_at IS NULL ORDER BY award_date DESC, id DESC')
-
-export const getAward = (id: number) =>
-  one<Award>('SELECT * FROM awards WHERE id = ? AND deleted_at IS NULL', [id])
-
-export const getItemImages = (type: 'award' | 'self_dev', id: number) =>
-  all<ItemImage>(`SELECT * FROM item_images WHERE entity_type = ? AND entity_id = ?
-                  ORDER BY sort_order, id`, [type, id])
-
-export const getItemFiles = (type: 'award' | 'self_dev', id: number) =>
-  all<ItemFile>(`SELECT * FROM item_files WHERE entity_type = ? AND entity_id = ?
-                 ORDER BY sort_order, id`, [type, id])
-
-/* ---------------- ตัวเลขสรุปหน้าแรก ---------------- */
-
-/** ตัวเลขสรุป — รวมเป็นคำสั่งเดียว เพราะการวิ่งไปฐานข้อมูลแต่ละครั้งมีค่าหน่วงราว 150 ms */
-export const getStats = cache(async () => {
-  const r = await one<{ works: number; images: number; hours: number; awards: number }>(`
-    SELECT
-      (SELECT COUNT(*) FROM works WHERE deleted_at IS NULL AND status='published') AS works,
-      (SELECT COUNT(*) FROM work_images)                                           AS images,
-      (SELECT COALESCE(SUM(hours),0) FROM self_developments WHERE deleted_at IS NULL) AS hours,
-      (SELECT COUNT(*) FROM awards WHERE deleted_at IS NULL)                       AS awards`)
-  return {
-    works: Number(r?.works ?? 0),
-    images: Number(r?.images ?? 0),
-    hours: Number(r?.hours ?? 0),
-    awards: Number(r?.awards ?? 0),
-  }
-})
-
-
-/* ---------------- ภาพรวมตัวชี้วัดของข้อตกลงปีหนึ่ง ---------------- */
-
-export interface IndicatorOverview extends Indicator {
-  work_count: number
-  pa: PaDetail | null
+export interface NewsItem {
+  id: number
+  slug: string
+  title: string
+  excerpt: string
+  content: string | null
+  activity_type: string
+  event_date: string | null
+  year_be: number | null
+  location: string
+  cover_source: 'drive' | 'static' | null
+  cover_ref: string | null
+  view_count: number
+  is_pinned: number
+  status: 'draft' | 'published'
+  created_at: string
 }
 
-/**
- * 15 ตัวชี้วัด พร้อมข้อตกลงของปีนั้นและจำนวนผลงานของแต่ละตัว จัดกลุ่มตามด้าน
- * ใช้ในหน้าข้อตกลง PA (ตอนที่ 2) — ตรงกับ Repository::indicatorOverviewGrouped ของเว็บ PHP
- */
-export async function getIndicatorOverviewGrouped(
-  agreementId: number,
-  includeDraft = false,
-): Promise<Map<number, IndicatorOverview[]>> {
-  const [indicators, counts, details] = await Promise.all([
-    getIndicators(),
-    getWorkCountByIndicator(includeDraft),
-    agreementId ? getPaDetails(agreementId) : Promise.resolve([]),
-  ])
-  const paByInd = new Map(details.map((d) => [Number(d.indicator_id), d]))
-
-  const grouped = new Map<number, IndicatorOverview[]>([[1, []], [2, []], [3, []]])
-  for (const ind of indicators) {
-    const code = Number(ind.domain_code)
-    grouped.get(code)?.push({
-      ...ind,
-      work_count: counts.get(ind.id) ?? 0,
-      pa: paByInd.get(ind.id) ?? null,
-    })
-  }
-  return grouped
+export async function getNewsList(limit = 10, offset = 0) {
+  return all<NewsItem>(
+    `SELECT n.*, 
+            (SELECT group_concat(a.name_th) FROM news_attributes na JOIN attributes a ON a.code = na.attribute_code WHERE na.news_id = n.id) AS attr_names
+     FROM news n 
+     WHERE n.deleted_at IS NULL AND n.status = 'published' 
+     ORDER BY n.is_pinned DESC, n.event_date DESC, n.id DESC 
+     LIMIT ? OFFSET ?`, [limit, offset]
+  )
 }
 
+export const getNewsBySlug = (slug: string) =>
+  one<NewsItem>('SELECT * FROM news WHERE slug = ? AND deleted_at IS NULL', [slug])
 
-/* ---------------- ตัวเลขสรุปหน้าแรก (ตรงกับ Repository::stats ของเว็บ PHP) ---------------- */
+export const getNewsImages = (newsId: number) =>
+  all<{ id: number; source: string; ref: string; caption: string }>(
+    'SELECT * FROM news_images WHERE news_id = ? ORDER BY sort_order, id', [newsId]
+  )
 
-export interface HomeStats {
-  total_works: number
-  works_by_domain: Map<number, number>
-  filled: Map<number, number>
-  total_per_domain: Map<number, number>
-  filled_total: number
-  indicator_total: number
-  self_dev_hours: number
-  awards: number
-}
 
-export const getHomeStats = cache(async (): Promise<HomeStats> => {
-  const [indicators, counts, byDomain, totals] = await Promise.all([
-    getIndicators(),
-    getWorkCountByIndicator(),
-    all<{ code: number; n: number }>(
-      `SELECT d.code AS code, COUNT(w.id) AS n
-       FROM domains d
-       JOIN indicators i ON i.domain_id = d.id
-       LEFT JOIN works w ON w.indicator_id = i.id AND w.deleted_at IS NULL AND w.status = 'published'
-       GROUP BY d.code`),
-    one<{ works: number; hours: number; awards: number }>(`
-      SELECT
+/* ---------------- สถิติหน้าแรก (Home Stats) ---------------- */
+
+export const getHomeStats = cache(async () => {
+  const [levelCounts, attrCounts, totals] = await Promise.all([
+    all<{ code: string; total: number }>(`
+      SELECT l.code, COUNT(w.id) AS total 
+      FROM levels l 
+      LEFT JOIN works w ON w.level_code = l.code AND w.status = 'published' AND w.deleted_at IS NULL
+      GROUP BY l.code
+    `),
+    all<{ code: string; total: number }>(`
+      SELECT a.code, COUNT(wa.work_id) AS total 
+      FROM attributes a 
+      LEFT JOIN work_attributes wa ON wa.attribute_code = a.code
+      LEFT JOIN works w ON w.id = wa.work_id AND w.status = 'published' AND w.deleted_at IS NULL
+      GROUP BY a.code
+    `),
+    one<{ works: number; news: number }>(`
+      SELECT 
         (SELECT COUNT(*) FROM works WHERE deleted_at IS NULL AND status='published') AS works,
-        (SELECT COALESCE(SUM(hours),0) FROM self_developments WHERE deleted_at IS NULL) AS hours,
-        (SELECT COUNT(*) FROM awards WHERE deleted_at IS NULL) AS awards`),
+        (SELECT COUNT(*) FROM news WHERE deleted_at IS NULL AND status='published') AS news
+    `)
   ])
-
-  const filled = new Map<number, number>([[1, 0], [2, 0], [3, 0]])
-  const totalPerDomain = new Map<number, number>([[1, 0], [2, 0], [3, 0]])
-  for (const ind of indicators) {
-    const dc = Number(ind.domain_code)
-    totalPerDomain.set(dc, (totalPerDomain.get(dc) ?? 0) + 1)
-    if ((counts.get(ind.id) ?? 0) > 0) filled.set(dc, (filled.get(dc) ?? 0) + 1)
-  }
 
   return {
     total_works: Number(totals?.works ?? 0),
-    works_by_domain: new Map(byDomain.map((r) => [Number(r.code), Number(r.n)])),
-    filled,
-    total_per_domain: totalPerDomain,
-    filled_total: [...filled.values()].reduce((a, b) => a + b, 0),
-    indicator_total: indicators.length,
-    self_dev_hours: Number(totals?.hours ?? 0),
-    awards: Number(totals?.awards ?? 0),
+    total_news: Number(totals?.news ?? 0),
+    works_by_level: new Map(levelCounts.map(r => [r.code, Number(r.total)])),
+    works_by_attr: new Map(attrCounts.map(r => [r.code, Number(r.total)]))
   }
 })
-
-
-/* ---------------- ข้อมูลประกอบหน้าการพัฒนาตนเอง ---------------- */
-
-/** จำนวนรายการและชั่วโมงแยกรายปีงบประมาณ — ใช้แสดงใน dropdown เลือกปี */
-export const getSelfDevYearStats = cache(async (): Promise<Map<number, { n: number; h: number }>> => {
-  const rows = await all<{ fiscal_year: number; n: number; h: number }>(
-    `SELECT fiscal_year, COUNT(*) AS n, COALESCE(SUM(hours),0) AS h
-     FROM self_developments WHERE deleted_at IS NULL GROUP BY fiscal_year`)
-  return new Map(rows.map((r) => [Number(r.fiscal_year), { n: Number(r.n), h: Number(r.h) }]))
-})
-
-/** ชั่วโมงพัฒนาตนเอง — ระบุปีเพื่อดูเฉพาะปีนั้น ไม่ระบุคือรวมทุกปี */
-export const getSelfDevHours = cache(async (fiscalYear?: number): Promise<number> => {
-  const n = await scalar<number>(
-    `SELECT COALESCE(SUM(hours),0) FROM self_developments
-     WHERE deleted_at IS NULL ${fiscalYear ? 'AND fiscal_year = ?' : ''}`,
-    fiscalYear ? [fiscalYear] : [])
-  return Number(n ?? 0)
-})
-
-export interface AttachCount { images: number; files: number }
-
-/** จำนวนรูปและไฟล์แนบของแต่ละรายการ — ใช้แสดงชิป "🖼️ n · 📎 n" */
-export const getItemAttachmentCounts = cache(
-  async (type: 'award' | 'self_dev'): Promise<Map<number, AttachCount>> => {
-    const [imgs, files] = await Promise.all([
-      all<{ entity_id: number; n: number }>(
-        'SELECT entity_id, COUNT(*) AS n FROM item_images WHERE entity_type = ? GROUP BY entity_id', [type]),
-      all<{ entity_id: number; n: number }>(
-        'SELECT entity_id, COUNT(*) AS n FROM item_files WHERE entity_type = ? GROUP BY entity_id', [type]),
-    ])
-    const out = new Map<number, AttachCount>()
-    const get = (id: number) => out.get(id) ?? { images: 0, files: 0 }
-    for (const r of imgs) out.set(Number(r.entity_id), { ...get(Number(r.entity_id)), images: Number(r.n) })
-    for (const r of files) out.set(Number(r.entity_id), { ...get(Number(r.entity_id)), files: Number(r.n) })
-    return out
-  })
-
-
-/* ---------------- ผลงานแบบแบ่งหน้า + จำนวนรูป/ไฟล์ (ใช้ในหน้าตัวชี้วัด) ---------------- */
-
-export interface WorkRow extends Work {
-  image_count: number
-  file_count: number
-}
-
-export interface WorkPage {
-  rows: WorkRow[]
-  total: number
-  page: number
-  last_page: number
-}
-
-export type WorkSort = 'latest' | 'oldest' | 'popular' | 'title'
-
-const SORT_SQL: Record<WorkSort, string> = {
-  latest: 'w.work_date DESC, w.id DESC',
-  oldest: 'w.work_date ASC, w.id ASC',
-  popular: 'w.view_count DESC, w.id DESC',
-  title: 'w.title ASC',
-}
-
-/** ค้นหา/กรอง/เรียง/แบ่งหน้า — ตรงกับ Repository::works() ของเว็บ PHP */
-export async function getWorkPage(opts: {
-  indicatorId?: number; academicYear?: number; q?: string
-  sort?: WorkSort; page?: number; perPage?: number
-  /** หลังบ้านต้องเห็นฉบับร่างของตัวเองด้วย */
-  includeDraft?: boolean
-  status?: 'draft' | 'published'
-}): Promise<WorkPage> {
-  const perPage = Math.min(48, Math.max(1, opts.perPage ?? 9))
-  const page = Math.max(1, opts.page ?? 1)
-  const sort = SORT_SQL[opts.sort ?? 'latest'] ?? SORT_SQL.latest
-
-  const where = ['w.deleted_at IS NULL']
-  const args: (string | number)[] = []
-  if (opts.status) { where.push('w.status = ?'); args.push(opts.status) }
-  else if (!opts.includeDraft) where.push("w.status = 'published'")
-  if (opts.indicatorId) { where.push('w.indicator_id = ?'); args.push(opts.indicatorId) }
-  if (opts.q) {
-    where.push('(w.title LIKE ? OR w.summary LIKE ? OR w.tags LIKE ?)')
-    const like = `%${opts.q}%`
-    args.push(like, like, like)
-  }
-  const cond = where.join(' AND ')
-
-  const total = Number(await scalar<number>(
-    `SELECT COUNT(*) FROM works w WHERE ${cond}`, args) ?? 0)
-  const lastPage = Math.max(1, Math.ceil(total / perPage))
-  const safePage = Math.min(page, lastPage)
-
-  const rows = await all<WorkRow>(
-    `SELECT w.*, i.code AS indicator_code, i.name AS indicator_name, d.code AS domain_code,
-            (SELECT COUNT(*) FROM work_images wi WHERE wi.work_id = w.id) AS image_count,
-            (SELECT COUNT(*) FROM work_files wf WHERE wf.work_id = w.id)  AS file_count
-     FROM works w
-     JOIN indicators i ON i.id = w.indicator_id
-     JOIN domains d ON d.id = i.domain_id
-     WHERE ${cond}
-     ORDER BY ${sort}
-     LIMIT ? OFFSET ?`, [...args, perPage, (safePage - 1) * perPage])
-
-  return { rows, total, page: safePage, last_page: lastPage }
-}
-
-/** ตัวชี้วัดก่อนหน้า/ถัดไป ตามลำดับด้านและ sort_order */
-export const getIndicatorNeighbors = cache(async (id: number) => {
-  const list = await getIndicators()
-  const i = list.findIndex((x) => x.id === id)
-  return { prev: i > 0 ? list[i - 1]! : null, next: i >= 0 && i < list.length - 1 ? list[i + 1]! : null }
-})
-
-
-/* ---------------- ผลงานก่อนหน้า / ถัดไป ในตัวชี้วัดเดียวกัน ---------------- */
-
-export interface WorkNeighbor { id: number; title: string; slug: string; work_date: string | null }
-
-export async function getWorkNeighbors(indicatorId: number, workDate: string | null, id: number) {
-  const [prev, next] = await Promise.all([
-    one<WorkNeighbor>(
-      `SELECT id, title, slug, work_date FROM works
-       WHERE indicator_id = ? AND status='published' AND deleted_at IS NULL
-         AND (work_date < ? OR (work_date = ? AND id < ?))
-       ORDER BY work_date DESC, id DESC LIMIT 1`, [indicatorId, workDate, workDate, id]),
-    one<WorkNeighbor>(
-      `SELECT id, title, slug, work_date FROM works
-       WHERE indicator_id = ? AND status='published' AND deleted_at IS NULL
-         AND (work_date > ? OR (work_date = ? AND id > ?))
-       ORDER BY work_date ASC, id ASC LIMIT 1`, [indicatorId, workDate, workDate, id]),
-  ])
-  return { prev, next }
-}
-
-/** จำนวนผลงานทั้งหมดในตัวชี้วัดหนึ่ง (ใช้บอกบริบทบนปุ่ม) */
-export const getIndicatorWorkTotal = async (indicatorId: number): Promise<number> =>
-  Number(await scalar<number>(
-    `SELECT COUNT(*) FROM works WHERE indicator_id = ? AND status='published' AND deleted_at IS NULL`,
-    [indicatorId]) ?? 0)
-
-
-/* ---------------- ก่อนหน้า / ถัดไป ของรางวัลและการพัฒนาตนเอง ---------------- */
-
-export interface AwardNeighbor { id: number; title: string; award_date: string | null; level: string }
-export interface SelfDevNeighbor { id: number; title: string; start_date: string | null; type: string }
-
-export async function getAwardNeighbors(awardDate: string | null, id: number) {
-  const [prev, next] = await Promise.all([
-    one<AwardNeighbor>(
-      `SELECT id, title, award_date, level FROM awards
-       WHERE deleted_at IS NULL AND (award_date < ? OR (award_date = ? AND id < ?))
-       ORDER BY award_date DESC, id DESC LIMIT 1`, [awardDate, awardDate, id]),
-    one<AwardNeighbor>(
-      `SELECT id, title, award_date, level FROM awards
-       WHERE deleted_at IS NULL AND (award_date > ? OR (award_date = ? AND id > ?))
-       ORDER BY award_date ASC, id ASC LIMIT 1`, [awardDate, awardDate, id]),
-  ])
-  return { prev, next }
-}
-
-export async function getSelfDevNeighbors(startDate: string | null, id: number) {
-  const [prev, next] = await Promise.all([
-    one<SelfDevNeighbor>(
-      `SELECT id, title, start_date, type FROM self_developments
-       WHERE deleted_at IS NULL AND (start_date < ? OR (start_date = ? AND id < ?))
-       ORDER BY start_date DESC, id DESC LIMIT 1`, [startDate, startDate, id]),
-    one<SelfDevNeighbor>(
-      `SELECT id, title, start_date, type FROM self_developments
-       WHERE deleted_at IS NULL AND (start_date > ? OR (start_date = ? AND id > ?))
-       ORDER BY start_date ASC, id ASC LIMIT 1`, [startDate, startDate, id]),
-  ])
-  return { prev, next }
-}
-
-/** จำนวนรายการพัฒนาตนเองในปีงบประมาณหนึ่ง */
-export const getSelfDevCountByYear = async (fiscalYear: number): Promise<number> =>
-  Number(await scalar<number>(
-    'SELECT COUNT(*) FROM self_developments WHERE deleted_at IS NULL AND fiscal_year = ?',
-    [fiscalYear]) ?? 0)
-
-
-/* ---------------- ตัวเลขสำหรับแดชบอร์ดหลังบ้าน ---------------- */
-
-export interface AdminStats extends HomeStats {
-  /** รหัสตัวชี้วัดที่ยังไม่มีผลงาน */
-  missing: string[]
-  fiscal_year: number
-}
-
-/**
- * สถิติสำหรับหลังบ้าน — ตรงกับ Repository::stats() ของเว็บ PHP
- * includeDraft = true จะนับฉบับร่างด้วย (PHP เรียกทั้งสองแบบในหน้าแดชบอร์ด)
- */
-export const getAdminStats = cache(async (includeDraft = false): Promise<AdminStats> => {
-  const pubOnly = !includeDraft
-  const statusCond = pubOnly ? " AND status='published'" : ''
-  const wStatus = pubOnly ? " AND w.status='published'" : ''
-
-  const [indicators, countRows, byDomain, totals, latestFy] = await Promise.all([
-    getIndicators(),
-    all<{ indicator_id: number; n: number }>(
-      `SELECT indicator_id, COUNT(*) AS n FROM works
-       WHERE deleted_at IS NULL${statusCond} GROUP BY indicator_id`),
-    all<{ code: number; n: number }>(
-      `SELECT d.code AS code, COUNT(w.id) AS n
-       FROM domains d
-       JOIN indicators i ON i.domain_id = d.id
-       LEFT JOIN works w ON w.indicator_id = i.id AND w.deleted_at IS NULL${wStatus}
-       GROUP BY d.code`),
-    one<{ works: number; hours: number; awards: number }>(`
-      SELECT
-        (SELECT COUNT(*) FROM works WHERE deleted_at IS NULL${statusCond}) AS works,
-        (SELECT COALESCE(SUM(hours),0) FROM self_developments WHERE deleted_at IS NULL) AS hours,
-        (SELECT COUNT(*) FROM awards WHERE deleted_at IS NULL) AS awards`),
-    scalar<number>('SELECT fiscal_year FROM pa_agreements WHERE deleted_at IS NULL ORDER BY fiscal_year DESC LIMIT 1'),
-  ])
-
-  const counts = new Map(countRows.map((r) => [Number(r.indicator_id), Number(r.n)]))
-  const filled = new Map<number, number>([[1, 0], [2, 0], [3, 0]])
-  const totalPerDomain = new Map<number, number>([[1, 0], [2, 0], [3, 0]])
-  const missing: string[] = []
-  for (const ind of indicators) {
-    const dc = Number(ind.domain_code)
-    totalPerDomain.set(dc, (totalPerDomain.get(dc) ?? 0) + 1)
-    if ((counts.get(ind.id) ?? 0) > 0) filled.set(dc, (filled.get(dc) ?? 0) + 1)
-    else missing.push(ind.code)
-  }
-
-  return {
-    total_works: Number(totals?.works ?? 0),
-    works_by_domain: new Map(byDomain.map((r) => [Number(r.code), Number(r.n)])),
-    filled,
-    total_per_domain: totalPerDomain,
-    filled_total: [...filled.values()].reduce((a, b) => a + b, 0),
-    indicator_total: indicators.length,
-    self_dev_hours: Number(totals?.hours ?? 0),
-    awards: Number(totals?.awards ?? 0),
-    missing,
-    fiscal_year: Number(latestFy ?? new Date().getFullYear() + 544),
-  }
-})
-
-/** จำนวนผลงานที่เพิ่มในเดือนนี้ */
-export const getWorksAddedThisMonth = async (): Promise<number> => {
-  const first = new Date()
-  const from = `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}-01 00:00:00`
-  return Number(await scalar<number>(
-    'SELECT COUNT(*) FROM works WHERE deleted_at IS NULL AND created_at >= ?', [from]) ?? 0)
-}
-
-/** ผลงานล่าสุดรวมฉบับร่าง (ใช้ในแดชบอร์ดหลังบ้าน) */
-export const getRecentWorksIncludingDraft = (limit = 6) =>
-  all<Work>(`SELECT w.*, i.code AS indicator_code, i.name AS indicator_name, d.code AS domain_code
-             FROM works w
-             LEFT JOIN indicators i ON i.id = w.indicator_id
-             LEFT JOIN domains d ON d.id = i.domain_id
-             WHERE w.deleted_at IS NULL
-             ORDER BY w.work_date DESC, w.id DESC LIMIT ?`, [limit])
-
-/* ============================================================ รายงานหน้าเดียว */
-
-/** ชนิดรายงานที่รองรับ + ชื่อมาตรฐานที่ใช้แสดงผล (ตรงกับเว็บ PHP) */
-export const REPORT_KINDS = {
-  salary: {
-    title: 'รายงานผลการประเมินการปฏิบัติงาน เพื่อเลื่อนเงินเดือน',
-    short: 'เลื่อนเงินเดือน',
-    icon: '💰',
-    tone: 'gold',
-  },
-  pa: {
-    title: 'รายงานผลการปฏิบัติงานตามข้อตกลง (PA)',
-    short: 'ตามข้อตกลง PA',
-    icon: '📊',
-    tone: 'primary',
-  },
-} as const
-
-export const REPORT_KIND_LIST = ['salary', 'pa'] as const
-
-/**
- * รายงานทั้งสองชนิดของปีงบประมาณหนึ่ง — คืนเป็น { salary, pa } เสมอ
- * (คิวรีเดียวได้ครบ ไม่ต้องยิงสองรอบ)
- */
-export const getReportsOfYear = async (
-  fiscalYear: number,
-): Promise<Record<ReportKind, OnePageReport | null>> => {
-  const rows = await all<OnePageReport>(
-    'SELECT * FROM one_page_reports WHERE fiscal_year = ?', [fiscalYear])
-  const out: Record<ReportKind, OnePageReport | null> = { salary: null, pa: null }
-  for (const r of rows) {
-    if (r.kind in out) out[r.kind] = r
-  }
-  return out
-}
-
-export const getReport = (fiscalYear: number, kind: ReportKind) =>
-  one<OnePageReport>('SELECT * FROM one_page_reports WHERE fiscal_year = ? AND kind = ?',
-    [fiscalYear, kind])
-
-/** จำนวนรายงานที่อัปไว้แล้ว แยกตามปีงบประมาณ → { 2569: 2, 2568: 1 } */
-export const getReportCountByYear = async (): Promise<Record<number, number>> => {
-  const rows = await all<{ fiscal_year: number; c: number }>(
-    'SELECT fiscal_year, COUNT(*) AS c FROM one_page_reports GROUP BY fiscal_year')
-  const out: Record<number, number> = {}
-  for (const r of rows) out[Number(r.fiscal_year)] = Number(r.c)
-  return out
-}
