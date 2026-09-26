@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdmin, logAction } from '@/lib/auth'
 import { db, now, one, all } from '@/lib/db'
-import { str, int, date, pick, slugify } from '@/lib/form'
+import { str, int, slugify, pick } from '@/lib/form'
 import type { MediaSource } from '@/lib/media'
 
 export type Result =
@@ -22,8 +22,8 @@ export interface WorkEdit {
   files: FileRow[]
 }
 
-/** อ่านผลงาน 1 ชิ้นพร้อมรูป/ไฟล์ — ตรงกับ GET api/works.php?admin=1&id= */
-export async function getWorkForEdit(id: number): Promise<WorkEdit | null> {
+/** อ่านผลงาน 1 ชิ้นพร้อมรูป/ไฟล์ */
+export async function getworkForEdit(id: number): Promise<WorkEdit | null> {
   await requireAdmin()
 
   const w = await one<Record<string, unknown>>(
@@ -68,7 +68,7 @@ function parseRows(raw: string) {
       caption: String(r.caption ?? '').slice(0, 255),
       name: String(r.original_name ?? '').slice(0, 255) || 'ไฟล์แนบ',
     }]
-  }).slice(0, 60)   // กันการยัดข้อมูลจำนวนมหาศาล
+  }).slice(0, 60)
 }
 
 /** ทำให้ slug ไม่ซ้ำกับผลงานอื่น */
@@ -84,8 +84,8 @@ async function uniqueSlug(base: string, exceptId: number): Promise<string> {
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export async function saveWork(f: FormData): Promise<Result> {
-  await requireAdmin()                          // ด่านตรวจ — ต้องมีทุก action
+export async function savework(f: FormData): Promise<Result> {
+  await requireAdmin()   // ด่านตรวจ — ต้องมิทุก action
 
   const id = int(f, 'id')
   const title = str(f, 'title', 255)
@@ -96,7 +96,7 @@ export async function saveWork(f: FormData): Promise<Result> {
     return { ok: false, error: 'กรุณาเลือกตัวชี้วัด' }
 
   const year = int(f, 'academic_year')
-  if (year < 2500 || year > 2700) return { ok: false, error: 'ปีการศึกษาต้องอยู่ระหว่าง 2500–2700' }
+  if (year < 2500 || year > 2700) return { ok: false, error: 'ปีพุทธศักราชต้องอยู่ระหว่าง 2500–2700' }
 
   if (id && !await one('SELECT id FROM works WHERE id = ? AND deleted_at IS NULL', [id]))
     return { ok: false, error: 'ไม่พบผลงานที่ต้องการแก้ไข' }
@@ -105,7 +105,7 @@ export async function saveWork(f: FormData): Promise<Result> {
   const common = [
     indicatorId, title, str(f, 'summary', 500), str(f, 'content', 20000),
     year, Math.max(1, Math.min(3, int(f, 'semester', 1))),
-    date(f, 'work_date') ?? today(), str(f, 'video_url', 500), str(f, 'tags', 255),
+    str(f, 'work_date') ? str(f, 'work_date') : today(), str(f, 'video_url', 500), str(f, 'tags', 255),
     f.get('is_featured') ? 1 : 0,
     pick(f, 'status', ['draft', 'published'] as const, 'published'), t,
   ]
@@ -144,13 +144,13 @@ export async function saveWork(f: FormData): Promise<Result> {
   await db.execute({ sql: 'DELETE FROM work_files WHERE work_id = ?', args: [workId] })
   for (const [i, fl] of files.entries()) {
     await db.execute({
-      sql: `INSERT INTO work_files (work_id, source, ref, original_name, sort_order, created_at)
+      sql: `INSERT INTO work_files (work_id, source, ref, original_name, sort_order, created_st ?? created_at)
             VALUES (?,?,?,?,?,?)`,
       args: [workId, fl.source, fl.ref, fl.name, i, t],
     })
   }
 
-  // ภาพปก = รูปแรกในแกลเลอรีเสมอ (เหมือนเว็บ PHP ที่หยิบรูปแรกมาเป็นปกถ้ายังไม่มี)
+  // ภาพปก = รูปแรกในแกลเลอรีเสมอ
   const first = images[0] ?? null
   await db.execute({
     sql: 'UPDATE works SET cover_source=?, cover_ref=? WHERE id=?',
@@ -162,7 +162,7 @@ export async function saveWork(f: FormData): Promise<Result> {
   return { ok: true, id: workId, indicator_id: indicatorId }
 }
 
-export async function deleteWork(id: number): Promise<{ ok: boolean; error?: string }> {
+export async function deletework(id: number): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin()
   await db.execute({ sql: 'UPDATE works SET deleted_at = ? WHERE id = ?', args: [now(), id] })
   await logAction('ลบผลงาน', 'works', id)
