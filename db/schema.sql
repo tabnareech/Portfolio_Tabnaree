@@ -1,84 +1,249 @@
--- =====================================================================
---  schema.sql — โครงสร้างฐานข้อมูลสำหรับ Turso (libSQL)
---
---  Turso คือ SQLite ที่ทำเป็นบริการ ไวยากรณ์เหมือน SQLite ทุกอย่าง
---  จึงยกโครงเดิมมาได้เกือบทั้งหมด สิ่งที่เปลี่ยนคือ "วิธีอ้างถึงรูปและไฟล์"
---
---  ── โมเดลสื่อแบบใหม่ (source + ref) ──────────────────────────────
---  เดิม  : เก็บ path ของไฟล์บนเซิร์ฟเวอร์ เช่น 'works/2026/07/abc.webp'
---  ใหม่  : เก็บ 2 คอลัมน์คู่กันเสมอ
---            source = 'drive'  → ref คือ Google Drive FILE ID
---            source = 'static' → ref คือ path ใต้ /public เช่น 'media/seed/w5_1.jpg'
---
---  เหตุผลที่เก็บ "ID" ไม่ใช่ URL เต็ม:
---    lh3.googleusercontent.com เป็น endpoint ที่ Google ไม่ได้ประกาศรองรับ
---    ถ้าวันหนึ่งเปลี่ยนรูปแบบ เราแก้ที่ src/lib/media.ts ไฟล์เดียวจบ
---    ไม่ต้องไล่แก้ทุกแถวในฐานข้อมูลของลูกค้าทุกคน
---
---  หมายเหตุ: ไม่มี thumb แล้ว เพราะย่อขนาดได้ที่ปลายทาง
---            drive  → ต่อท้าย =w400
---            static → ผ่าน Netlify Image CDN
---
---  updated_at ให้โค้ดฝั่ง TypeScript เป็นคนใส่ (ไม่ใช้ trigger)
--- =====================================================================
-
+-- TABNAREE EDUCATION PORTFOLIO — Turso (libSQL/SQLite)
+-- works = ผลงาน/เกียรติบัตร/รางวัล (มีระดับ) · news = ข่าวงานประจำวัน (ไม่มีระดับ)
+-- จัดหมวด 3 แกนอิสระ: levels (เลือก 1) · work_types (หลายค่า เพิ่มเองได้) · attributes (หลายค่า)
+-- วันที่เนื้อหาเก็บเป็น พ.ศ. 'YYYY-MM-DD' เช่น '2569-09-25' (string คงที่ ORDER BY ได้ตรง)
+-- ห้ามส่งค่าวันที่เหล่านี้เข้า new Date() ใน JS — ใช้ lib/date.ts เท่านั้น
+-- ยกเว้น created_at/updated_at/deleted_at/last_login_at = เวลาระบบ (ค.ศ.) ไม่แสดงผล
+-- สื่อใช้คู่ source+ref : drive = Google Drive FILE ID · static = path ใต้ /public
+-- updated_at ให้ฝั่ง TypeScript เป็นคนใส่ (ไม่ใช้ trigger)
 PRAGMA foreign_keys = ON;
+-- ===== 1. ตารางอ้างอิง =====
 
--- ---------------------------------------------------------------------
---  บัญชีผู้ดูแล — ระบบนี้ออกแบบมาสำหรับ "แอดมินคนเดียว"
--- ---------------------------------------------------------------------
-CREATE TABLE users (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  username      TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  full_name     TEXT NOT NULL,
-  role          TEXT NOT NULL DEFAULT 'admin',
-  last_login_at TEXT NULL,
-  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE levels (
+  code TEXT PRIMARY KEY,
+  name_th TEXT NOT NULL,
+  short_name TEXT NOT NULL DEFAULT '',
+  icon TEXT NOT NULL DEFAULT '',
+  color TEXT NOT NULL DEFAULT '#1D4ED8',
+  sort_order INTEGER NOT NULL DEFAULT 0
 );
 
--- ---------------------------------------------------------------------
---  โปรไฟล์ครู (มีแถวเดียวเสมอ id = 1)
---  avatar_focus_x/y = จุดโฟกัสของรูป 0–100 (%) ใช้กับ CSS object-position
---  แก้ปัญหา "ครอบตัดรูปแล้วหัวหาย" โดยไม่ต้องสร้างไฟล์ใหม่
---  ซึ่งจำเป็น เพราะรูปจาก Google Drive เราแก้ไขไฟล์ต้นทางไม่ได้
--- ---------------------------------------------------------------------
-CREATE TABLE teacher_profile (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  full_name         TEXT NOT NULL,
-  nickname          TEXT NOT NULL DEFAULT '',
-  position          TEXT NOT NULL DEFAULT '',
+CREATE TABLE attributes (
+  code TEXT PRIMARY KEY,
+  name_th TEXT NOT NULL,
+  short_name TEXT NOT NULL DEFAULT '',
+  icon TEXT NOT NULL DEFAULT '',
+  color TEXT NOT NULL DEFAULT '#16A34A',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE work_types (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX uq_work_types_slug ON work_types (slug);
+
+-- ===== 2. ข่าวประชาสัมพันธ์ (งานประจำวัน) =====
+CREATE TABLE news (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  excerpt TEXT NOT NULL DEFAULT '',
+  content TEXT NULL,
+  activity_type TEXT NOT NULL DEFAULT '',
+  event_date TEXT NULL,
+  year_be INTEGER NULL,
+  location TEXT NOT NULL DEFAULT '',
+  cover_source TEXT CHECK(cover_source IN ('drive','static')) NULL,
+  cover_ref TEXT NULL,
+  video_url TEXT NOT NULL DEFAULT '',
+  link_url TEXT NOT NULL DEFAULT '',
+  link_label TEXT NOT NULL DEFAULT '',
+  tags TEXT NOT NULL DEFAULT '',
+  view_count INTEGER NOT NULL DEFAULT 0,
+  is_pinned INTEGER NOT NULL DEFAULT 0,
+  status TEXT CHECK(status IN ('draft','published')) NOT NULL DEFAULT 'published',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TEXT NULL
+);
+
+CREATE TABLE news_attributes (
+  news_id INTEGER NOT NULL REFERENCES news(id) ON DELETE CASCADE,
+  attribute_code TEXT NOT NULL REFERENCES attributes(code) ON UPDATE CASCADE,
+  PRIMARY KEY (news_id, attribute_code)
+);
+
+CREATE TABLE news_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  news_id INTEGER NOT NULL REFERENCES news(id) ON DELETE CASCADE,
+  source TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
+  ref TEXT NOT NULL,
+  caption TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE news_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  news_id INTEGER NOT NULL REFERENCES news(id) ON DELETE CASCADE,
+  source TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
+  ref TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL DEFAULT '',
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ===== 3. ผลงาน (เกียรติบัตร/รางวัล) =====
+CREATE TABLE works (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  content TEXT NULL,
+  level_code TEXT NOT NULL DEFAULT 'agency' REFERENCES levels(code) ON UPDATE CASCADE,
+  awarded_by TEXT NOT NULL DEFAULT '',
+  awarded_person TEXT NOT NULL DEFAULT '',
+  cert_no TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT '',
+  work_date TEXT NULL,
+  year_be INTEGER NULL,
+  location TEXT NOT NULL DEFAULT '',
+  cover_source TEXT CHECK(cover_source IN ('drive','static')) NULL,
+  cover_ref TEXT NULL,
+  video_url TEXT NOT NULL DEFAULT '',
+  link_url TEXT NOT NULL DEFAULT '',
+  link_label TEXT NOT NULL DEFAULT '',
+  related_news_id INTEGER NULL REFERENCES news(id) ON DELETE SET NULL,
+  tags TEXT NOT NULL DEFAULT '',
+  view_count INTEGER NOT NULL DEFAULT 0,
+  is_featured INTEGER NOT NULL DEFAULT 0,
+  status TEXT CHECK(status IN ('draft','published')) NOT NULL DEFAULT 'published',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TEXT NULL
+);
+
+CREATE TABLE work_type_links (
+  work_id INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  work_type_id INTEGER NOT NULL REFERENCES work_types(id) ON DELETE CASCADE,
+  PRIMARY KEY (work_id, work_type_id)
+);
+
+CREATE TABLE work_attributes (
+  work_id INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  attribute_code TEXT NOT NULL REFERENCES attributes(code) ON UPDATE CASCADE,
+  PRIMARY KEY (work_id, attribute_code)
+);
+
+CREATE TABLE work_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  source TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
+  ref TEXT NOT NULL,
+  caption TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE work_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  source TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
+  ref TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL DEFAULT '',
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+-- ===== 4. การพัฒนาตนเอง =====
+
+CREATE TABLE self_developments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  organizer TEXT NOT NULL DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'อบรม',
+  start_date TEXT NULL,
+  end_date TEXT NULL,
+  year_be INTEGER NULL,
+  hours INTEGER NOT NULL DEFAULT 0,
+  location TEXT NOT NULL DEFAULT '',
+  certificate_source TEXT CHECK(certificate_source IN ('drive','static')) NULL,
+  certificate_ref TEXT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  content TEXT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  video_url TEXT NOT NULL DEFAULT '',
+  link_url TEXT NOT NULL DEFAULT '',
+  link_label TEXT NOT NULL DEFAULT '',
+  status TEXT CHECK(status IN ('draft','published')) NOT NULL DEFAULT 'published',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TEXT NULL
+);
+
+CREATE TABLE item_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type TEXT CHECK(entity_type IN ('self_dev')) NOT NULL,
+  entity_id INTEGER NOT NULL,
+  source TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
+  ref TEXT NOT NULL,
+  caption TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE item_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type TEXT CHECK(entity_type IN ('self_dev')) NOT NULL,
+  entity_id INTEGER NOT NULL,
+  source TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
+  ref TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL DEFAULT '',
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ===== 5. โปรไฟล์ =====
+CREATE TABLE profile (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  full_name TEXT NOT NULL,
+  nickname TEXT NOT NULL DEFAULT '',
+  position TEXT NOT NULL DEFAULT '',
   academic_standing TEXT NOT NULL DEFAULT '',
-  subject_group     TEXT NOT NULL DEFAULT '',
-  school            TEXT NOT NULL DEFAULT '',
-  affiliation       TEXT NOT NULL DEFAULT '',
-  area_office       TEXT NOT NULL DEFAULT '',
-  email             TEXT NOT NULL DEFAULT '',
-  phone             TEXT NOT NULL DEFAULT '',
-  facebook          TEXT NOT NULL DEFAULT '',
-  line_id           TEXT NOT NULL DEFAULT '',
-  -- ลิงก์ท้ายเว็บ (footer) ที่ครูแก้เองได้ — ว่าง = ถอยไปใช้ค่าในช่อง facebook
-  footer_link_url   TEXT NOT NULL DEFAULT '',
+  affiliation TEXT NOT NULL DEFAULT '',
+  department TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  facebook TEXT NOT NULL DEFAULT '',
+  line_id TEXT NOT NULL DEFAULT '',
+  youtube TEXT NOT NULL DEFAULT '',
+  footer_link_url TEXT NOT NULL DEFAULT '',
   footer_link_label TEXT NOT NULL DEFAULT '',
-  avatar_source     TEXT CHECK(avatar_source IN ('drive','static')) NULL,
-  avatar_ref        TEXT NULL,
-  avatar_focus_x    INTEGER NOT NULL DEFAULT 50,
-  avatar_focus_y    INTEGER NOT NULL DEFAULT 35,
-  motto             TEXT NOT NULL DEFAULT '',
-  philosophy        TEXT NOT NULL DEFAULT '',
-  bio               TEXT NULL,
-  experience_years  INTEGER NOT NULL DEFAULT 0,
-  teaching_hours    REAL NOT NULL DEFAULT 0,
-  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  avatar_source TEXT CHECK(avatar_source IN ('drive','static')) NULL,
+  avatar_ref TEXT NULL,
+  avatar_focus_x INTEGER NOT NULL DEFAULT 50,
+  avatar_focus_y INTEGER NOT NULL DEFAULT 35,
+  hero_source TEXT CHECK(hero_source IN ('drive','static')) NULL,
+  hero_ref TEXT NULL,
+  motto TEXT NOT NULL DEFAULT '',
+  philosophy TEXT NOT NULL DEFAULT '',
+  bio TEXT NULL,
+  experience_years INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE educations (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  year_th    INTEGER NOT NULL,
-  degree     TEXT NOT NULL,
-  institute  TEXT NOT NULL DEFAULT '',
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  year_be INTEGER NOT NULL,
+  degree TEXT NOT NULL,
+  institute TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -86,10 +251,10 @@ CREATE TABLE educations (
 );
 
 CREATE TABLE career_paths (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  period     TEXT NOT NULL,
-  position   TEXT NOT NULL,
-  school     TEXT NOT NULL DEFAULT '',
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  period TEXT NOT NULL,
+  position TEXT NOT NULL,
+  organization TEXT NOT NULL DEFAULT '',
   is_current INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -97,293 +262,65 @@ CREATE TABLE career_paths (
   deleted_at TEXT NULL
 );
 
--- ---------------------------------------------------------------------
---  3 ด้าน + 15 ตัวชี้วัด ตามเกณฑ์ วPA ว9/2564
--- ---------------------------------------------------------------------
-CREATE TABLE domains (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  code        INTEGER NOT NULL,
-  name        TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  color       TEXT NOT NULL DEFAULT '#1D4ED8',
-  icon        TEXT NOT NULL DEFAULT '📚',
-  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE indicators (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  domain_id   INTEGER NOT NULL,
-  code        TEXT NOT NULL,
-  name        TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  sort_order  INTEGER NOT NULL DEFAULT 0,
-  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
-);
-
--- ---------------------------------------------------------------------
---  ผลงาน / หลักฐาน
--- ---------------------------------------------------------------------
-CREATE TABLE works (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  indicator_id  INTEGER NULL,
-  title         TEXT NOT NULL,
-  slug          TEXT NOT NULL,
-  work_level    TEXT NOT NULL DEFAULT 'หน่วยงาน',
-  work_type     TEXT NOT NULL DEFAULT '',
-  role          TEXT NOT NULL DEFAULT '',
-  summary       TEXT NOT NULL DEFAULT '',
-  content       TEXT NULL,
-  work_date     TEXT NULL,
-  location      TEXT NOT NULL DEFAULT '',
-  cover_source  TEXT CHECK(cover_source IN ('drive','static')) NULL,
-  cover_ref     TEXT NULL,
-  video_url     TEXT NOT NULL DEFAULT '',
-  tags          TEXT NOT NULL DEFAULT '',
-  view_count    INTEGER NOT NULL DEFAULT 0,
-  is_featured   INTEGER NOT NULL DEFAULT 0,
-  status        TEXT CHECK(status IN ('draft','published')) NOT NULL DEFAULT 'published',
-  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  deleted_at    TEXT NULL,
-  FOREIGN KEY (indicator_id) REFERENCES indicators(id) ON DELETE CASCADE
-);
-
-CREATE TABLE work_criteria (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  work_id    INTEGER NOT NULL,
-  criterion  TEXT NOT NULL
-    CHECK (
-      criterion IN (
-        'ครองตน',
-        'ครองคน',
-        'ครองงาน',
-        'จริยธรรม'
-      )
-    ),
+-- ===== 6. ระบบ/ความปลอดภัย =====
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin',
+  last_login_at TEXT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_wc_work ON work_criteria (work_id);
-CREATE INDEX idx_wc_criterion ON work_criteria (criterion);
-
-CREATE TABLE work_images (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  work_id    INTEGER NOT NULL,
-  source     TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
-  ref        TEXT NOT NULL,
-  caption    TEXT NOT NULL DEFAULT '',
-  width      INTEGER NOT NULL DEFAULT 0,
-  height     INTEGER NOT NULL DEFAULT 0,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
-);
-
-CREATE TABLE work_files (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  work_id       INTEGER NOT NULL,
-  source        TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
-  ref           TEXT NOT NULL,
-  original_name TEXT NOT NULL,
-  mime_type     TEXT NOT NULL DEFAULT '',
-  size_bytes    INTEGER NOT NULL DEFAULT 0,
-  sort_order    INTEGER NOT NULL DEFAULT 0,
-  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
-);
-
--- ---------------------------------------------------------------------
---  ข้อตกลงในการพัฒนางาน (PA) แยกรายปีงบประมาณ
--- ---------------------------------------------------------------------
-CREATE TABLE pa_agreements (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  fiscal_year       INTEGER NOT NULL,
-  round             INTEGER NOT NULL DEFAULT 1,
-  period_start      TEXT NULL,
-  period_end        TEXT NULL,
-  position          TEXT NOT NULL DEFAULT '',
-  academic_standing TEXT NOT NULL DEFAULT '',
-  school            TEXT NOT NULL DEFAULT '',
-  affiliation       TEXT NOT NULL DEFAULT '',
-  subject_group     TEXT NOT NULL DEFAULT '',
-  teaching_hours    REAL NOT NULL DEFAULT 0,
-  support_hours     REAL NOT NULL DEFAULT 0,
-  status            TEXT CHECK(status IN ('draft','in_progress','evaluated')) NOT NULL DEFAULT 'draft',
-  evaluation_score  REAL NULL,
-  evaluation_result TEXT CHECK(evaluation_result IN ('pass','fail')) NULL,
-  pdf_source        TEXT CHECK(pdf_source IN ('drive','static')) NULL,
-  pdf_ref           TEXT NULL,
-  pdf_name          TEXT NULL,
-  -- ลิงก์เว็บไซต์ประกอบข้อตกลง (แสดงในตอนที่ 3) · link_label ว่าง = "เปิดเว็บไซต์ประกอบ"
-  link_url          TEXT NOT NULL DEFAULT '',
-  link_label        TEXT NOT NULL DEFAULT '',
-  note              TEXT NOT NULL DEFAULT '',
-  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  deleted_at        TEXT NULL
-);
-
-CREATE TABLE pa_details (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  agreement_id      INTEGER NOT NULL,
-  indicator_id      INTEGER NOT NULL,
-  task_description  TEXT NOT NULL,
-  expected_quantity TEXT NOT NULL DEFAULT '',
-  expected_quality  TEXT NOT NULL DEFAULT '',
-  sort_order        INTEGER NOT NULL DEFAULT 0,
-  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (agreement_id) REFERENCES pa_agreements(id) ON DELETE CASCADE,
-  FOREIGN KEY (indicator_id) REFERENCES indicators(id) ON DELETE CASCADE
-);
-
-CREATE TABLE pa_challenges (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  agreement_id      INTEGER NOT NULL,
-  topic             TEXT NOT NULL,
-  problem_statement TEXT NOT NULL,
-  method            TEXT NOT NULL,
-  expected_outcome  TEXT NOT NULL,
-  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (agreement_id) REFERENCES pa_agreements(id) ON DELETE CASCADE
-);
-
--- ---------------------------------------------------------------------
---  การพัฒนาตนเอง / รางวัล
--- ---------------------------------------------------------------------
-CREATE TABLE self_developments (
-  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-  title               TEXT NOT NULL,
-  organizer           TEXT NOT NULL DEFAULT '',
-  type                TEXT CHECK(type IN ('อบรม','สัมมนา','ศึกษาดูงาน','PLC','วิทยากร')) NOT NULL DEFAULT 'อบรม',
-  start_date          TEXT NULL,
-  end_date            TEXT NULL,
-  hours               INTEGER NOT NULL DEFAULT 0,
-  fiscal_year         INTEGER NOT NULL,
-  certificate_source  TEXT CHECK(certificate_source IN ('drive','static')) NULL,
-  certificate_ref     TEXT NULL,
-  note                TEXT NOT NULL DEFAULT '',
-  summary             TEXT NOT NULL DEFAULT '',
-  content             TEXT NULL,
-  video_url           TEXT NOT NULL DEFAULT '',
-  link_url            TEXT NOT NULL DEFAULT '',
-  link_label          TEXT NOT NULL DEFAULT '',
-  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  deleted_at          TEXT NULL
-);
-
-CREATE TABLE awards (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  title        TEXT NOT NULL,
-  awarder      TEXT NOT NULL DEFAULT '',
-  level        TEXT CHECK(level IN ('โรงเรียน','เขตพื้นที่','จังหวัด','ภาค','ชาติ','นานาชาติ')) NOT NULL DEFAULT 'โรงเรียน',
-  award_date   TEXT NULL,
-  image_source TEXT CHECK(image_source IN ('drive','static')) NULL,
-  image_ref    TEXT NULL,
-  note         TEXT NOT NULL DEFAULT '',
-  summary      TEXT NOT NULL DEFAULT '',
-  content      TEXT NULL,
-  video_url    TEXT NOT NULL DEFAULT '',
-  link_url     TEXT NOT NULL DEFAULT '',
-  link_label   TEXT NOT NULL DEFAULT '',
-  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  deleted_at   TEXT NULL
-);
-
--- รูป/ไฟล์แนบของรางวัลและการพัฒนาตนเอง (ใช้ตารางกลางร่วมกัน)
-CREATE TABLE item_images (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  entity_type TEXT CHECK(entity_type IN ('award','self_dev')) NOT NULL,
-  entity_id   INTEGER NOT NULL,
-  source      TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
-  ref         TEXT NOT NULL,
-  caption     TEXT NOT NULL DEFAULT '',
-  width       INTEGER NOT NULL DEFAULT 0,
-  height      INTEGER NOT NULL DEFAULT 0,
-  sort_order  INTEGER NOT NULL DEFAULT 0,
-  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE item_files (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  entity_type   TEXT CHECK(entity_type IN ('award','self_dev')) NOT NULL,
-  entity_id     INTEGER NOT NULL,
-  source        TEXT CHECK(source IN ('drive','static')) NOT NULL DEFAULT 'drive',
-  ref           TEXT NOT NULL,
-  original_name TEXT NOT NULL,
-  mime_type     TEXT NOT NULL DEFAULT '',
-  size_bytes    INTEGER NOT NULL DEFAULT 0,
-  sort_order    INTEGER NOT NULL DEFAULT 0,
-  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- ---------------------------------------------------------------------
---  ความปลอดภัย / ระบบ
--- ---------------------------------------------------------------------
 CREATE TABLE login_attempts (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  ip         TEXT NOT NULL,
-  username   TEXT NOT NULL DEFAULT '',
-  success    INTEGER NOT NULL DEFAULT 0,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip TEXT NOT NULL,
+  username TEXT NOT NULL DEFAULT '',
+  success INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE activity_log (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id    INTEGER NULL,
-  action     TEXT NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NULL,
+  action TEXT NOT NULL,
   table_name TEXT NOT NULL DEFAULT '',
-  record_id  INTEGER NULL,
-  detail     TEXT NOT NULL DEFAULT '',
-  ip         TEXT NOT NULL DEFAULT '',
+  record_id INTEGER NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  ip TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ---------------------------------------------------------------------
---  รายงานหน้าเดียว — แสดงบนหน้าแรก แยกตามปีงบประมาณ
---    kind = 'salary' (ประเมินเพื่อเลื่อนเงินเดือน) · 'pa' (ตามข้อตกลง)
---    file_kind = 'image' แสดงเป็นรูป · 'pdf' ฝังตัวอ่าน PDF ของ Google Drive
--- ---------------------------------------------------------------------
-CREATE TABLE one_page_reports (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  fiscal_year INTEGER NOT NULL,
-  kind        TEXT NOT NULL CHECK(kind IN ('salary','pa')),
-  title       TEXT NOT NULL DEFAULT '',
-  file_source TEXT CHECK(file_source IN ('drive','static')) NULL,
-  file_ref    TEXT NULL,
-  file_kind   TEXT NOT NULL DEFAULT 'image' CHECK(file_kind IN ('image','pdf')),
-  note        TEXT NOT NULL DEFAULT '',
-  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (fiscal_year, kind)
-);
-CREATE INDEX idx_reports_year ON one_page_reports(fiscal_year);
-
 CREATE TABLE site_settings (
-  key        TEXT NOT NULL PRIMARY KEY,
-  value      TEXT NOT NULL DEFAULT '',
+  key TEXT NOT NULL PRIMARY KEY,
+  value TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ---------------------------------------------------------------------
---  ดัชนี
--- ---------------------------------------------------------------------
+-- ===== 7. ดัชนี =====
 CREATE UNIQUE INDEX uq_users_username ON users (username);
-CREATE UNIQUE INDEX uq_domain_code    ON domains (code);
-CREATE UNIQUE INDEX uq_work_slug      ON works (slug);
-CREATE INDEX idx_ind_domain    ON indicators (domain_id, sort_order);
-CREATE INDEX idx_works_ind     ON works (indicator_id, status, deleted_at);
-CREATE INDEX idx_wi_work       ON work_images (work_id, sort_order);
-CREATE INDEX idx_wf_work       ON work_files (work_id, sort_order);
-CREATE INDEX idx_pad_agreement ON pa_details (agreement_id, sort_order);
-CREATE INDEX idx_sd_year       ON self_developments (fiscal_year, deleted_at);
-CREATE INDEX idx_ii_entity     ON item_images (entity_type, entity_id, sort_order);
-CREATE INDEX idx_if_entity     ON item_files (entity_type, entity_id, sort_order);
-CREATE INDEX idx_la_ip         ON login_attempts (ip, created_at);
+CREATE UNIQUE INDEX uq_works_slug ON works (slug);
+CREATE UNIQUE INDEX uq_news_slug ON news (slug);
+CREATE INDEX idx_works_level ON works (level_code, status, deleted_at);
+CREATE INDEX idx_works_date ON works (work_date DESC);
+CREATE INDEX idx_works_year ON works (year_be);
+CREATE INDEX idx_works_feat ON works (is_featured, status, deleted_at);
+CREATE INDEX idx_wa_work ON work_attributes (work_id);
+CREATE INDEX idx_wa_attr ON work_attributes (attribute_code);
+CREATE INDEX idx_wtl_work ON work_type_links (work_id);
+CREATE INDEX idx_wtl_type ON work_type_links (work_type_id);
+CREATE INDEX idx_wi_work ON work_images (work_id, sort_order);
+CREATE INDEX idx_wf_work ON work_files (work_id, sort_order);
+CREATE INDEX idx_news_date ON news (event_date DESC);
+CREATE INDEX idx_news_year ON news (year_be);
+CREATE INDEX idx_news_status ON news (status, deleted_at);
+CREATE INDEX idx_na_news ON news_attributes (news_id);
+CREATE INDEX idx_na_attr ON news_attributes (attribute_code);
+CREATE INDEX idx_ni_news ON news_images (news_id, sort_order);
+CREATE INDEX idx_nf_news ON news_files (news_id, sort_order);
+CREATE INDEX idx_sd_year ON self_developments (year_be, deleted_at);
+CREATE INDEX idx_ii_entity ON item_images (entity_type, entity_id, sort_order);
+CREATE INDEX idx_if_entity ON item_files (entity_type, entity_id, sort_order);
+CREATE INDEX idx_la_ip ON login_attempts (ip, created_at);
