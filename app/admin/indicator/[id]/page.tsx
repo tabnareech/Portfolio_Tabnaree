@@ -7,10 +7,10 @@ import {
 } from '@/lib/queries'
 import { domainTheme, currentAcademicYear } from '@/lib/theme'
 import PageHead from '@/components/admin/PageHead'
-import { WorkModalProvider, NewWorkButton } from '@/components/admin/WorkModal'
+import { WorkModalProvider, NewworkButton } from '@/components/admin/WorkModal'
 import AdminWorkTable from '@/components/admin/AdminWorkTable'
 
-/** จัดการ “ผลงาน” ของตัวชี้วัด 1 ตัว — แปลงจาก admin/indicator.php */
+/** จัดการผลงานและการปฏิบัติงาน */
 export default async function IndicatorAdmin({
   params,
   searchParams,
@@ -56,12 +56,12 @@ export default async function IndicatorAdmin({
       openEdit={Number(sp.edit) || undefined}
     >
       <PageHead
-        title={`ตัวชี้วัด ${ind.code} · ${ind.name}`}
-        sub={`ด้านที่ ${dc} ${ind.domain_name} — จัดการผลงานและหลักฐานของตัวชี้วัดนี้`}
+        title={`ผลงานด้าน ${ind.code} · ${ind.name}`}
+        sub={`จัดการข้อมูลผลงานและการปฏิบัติงานในส่วนนี้`}
         actions={
-          <NewWorkButton className="btn btn-primary text-[12.5px]">
+          <NewworkButton className="btn btn-primary text-[12.5px]">
             + เพิ่มผลงานใหม่
-          </NewWorkButton>
+          </NewworkButton>
         }
       />
 
@@ -73,7 +73,7 @@ export default async function IndicatorAdmin({
           rel="noreferrer"
           className="btn btn-white btn-sm"
         >
-          ดูหน้าเว็บของตัวชี้วัดนี้
+          ดูหน้าเว็บของส่วนนี้
         </a>
 
         <span className="ml-auto flex gap-2">
@@ -98,7 +98,7 @@ export default async function IndicatorAdmin({
         </span>
       </div>
 
-      {/* หัวตัวชี้วัด */}
+      {/* หัวข้อส่วนงาน */}
       <section
         className="mt-4 relative overflow-hidden rounded-[1.9rem] text-white shadow-lift"
         style={{ background: theme.grad }}
@@ -111,7 +111,7 @@ export default async function IndicatorAdmin({
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="chip chip-glass !text-[11px]">
-                  ด้านที่ {dc} · {ind.domain_name}
+                  หมวดที่ {dc} · {ind.domain_name}
                 </span>
                 <span
                   className="chip bg-white text-[11px] font-extrabold"
