@@ -3,16 +3,15 @@ import AdminOnly from '@/components/AdminOnly'
 import { notFound } from 'next/navigation'
 import {
   getWorkBySlug, getWorkImages, getWorkFiles, getWorks,
-  getRelatedWorks, getWorkNeighbors, getIndicatorWorkTotal,
+  getRelatedWorks, getWorkNeighbors,
 } from '@/lib/queries'
 import { imageUrl, fileUrl, IMG } from '@/lib/media'
-import { domainTheme, thaiDate, fileIcon, humanSize, excerpt, youtubeId } from '@/lib/theme'
+import { thaiDate, fileIcon, humanSize, excerpt, youtubeId } from '@/lib/theme'
 import WorkGallery from '@/components/WorkGallery'
 import ShareBar from '@/components/ShareBar'
 
 /**
- * หน้ารายละเอียดผลงาน — แปลงมาจาก work.php ของเว็บ PHP ให้โครงสร้างและข้อความตรงกัน
- *   HERO ไล่สีตามด้าน → แกลเลอรี → เนื้อหา → แถบข้าง (ข้อมูล/ไฟล์แนบ/เกี่ยวข้อง/ก่อนหน้า-ถัดไป)
+ * หน้ารายละเอียดผลงานทั่วไป
  */
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -24,7 +23,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 }
 
-/** สร้างหน้าผลงานทุกชิ้นไว้ล่วงหน้าตอน build */
 export async function generateStaticParams() {
   const works = await getWorks()
   return works.map((w) => ({ slug: w.slug }))
@@ -35,36 +33,30 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
   const work = await getWorkBySlug(decodeURIComponent(slug))
   if (!work) notFound()
 
-  const [images, files, related, neighbors, indicatorTotal] = await Promise.all([
-    getWorkImages(work.id), getWorkFiles(work.id),
-    getRelatedWorks(work.indicator_id, work.id, 3),
-    getWorkNeighbors(work.indicator_id, work.work_date, work.id),
-    getIndicatorWorkTotal(work.indicator_id),
+  const [images, files, related, neighbors] = await Promise.all([
+    getWorkImages(work.id),
+    getWorkFiles(work.id),
+    getRelatedWorks(work.id, 3),
+    getWorkNeighbors(work.work_date, work.id),
   ])
 
-  const theme = domainTheme(work.domain_code)
-  const domain = Number(work.domain_code)
   const ytId = youtubeId(work.video_url)
   const tags = work.tags ? work.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
   const galleryImages = images.map((im) => ({ id: im.id, source: im.source, ref: im.ref, caption: im.caption }))
 
   return (
     <main>
-      {/* ================= HERO (ไล่สีตามด้าน) ================= */}
-      <section className="relative overflow-hidden text-white" style={{ background: theme.grad }}>
+      {/* ================= HERO ================= */}
+      <section className="relative overflow-hidden text-white grad-hero">
         <div className="absolute inset-0 dots opacity-20" />
         <div className="blob w-[360px] h-[360px] !opacity-40 bg-white -right-24 -top-16" />
         <div className="blob w-[240px] h-[240px] !opacity-25 bg-white -left-20 -bottom-28 hidden md:block" />
-        <span className="absolute -right-2 -bottom-10 text-[220px] md:text-[300px] font-extrabold leading-none text-white/10 select-none pointer-events-none" aria-hidden="true">{domain}</span>
 
         <div className="relative max-w-[1240px] mx-auto px-4 md:px-10 pt-8 md:pt-12 pb-10 md:pb-14">
-          {/* breadcrumb chips */}
           <nav className="flex flex-wrap items-center gap-1.5 text-[11.5px]" aria-label="breadcrumb">
             <Link href="/" className="chip chip-glass !text-[11px] hover:!bg-white transition">🏠 หน้าแรก</Link>
             <span className="text-white/70" aria-hidden="true">›</span>
-            <Link href={`/pa#d${domain}`} className="chip chip-glass !text-[11px] hover:!bg-white transition">ข้อตกลง PA · ด้านที่ {domain}</Link>
-            <span className="text-white/70" aria-hidden="true">›</span>
-            <Link href={`/indicator/${work.indicator_id}`} className="chip chip-glass !text-[11px] hover:!bg-white transition">ตัวชี้วัด {work.indicator_code}</Link>
+            <Link href="/development" className="chip chip-glass !text-[11px] hover:!bg-white transition">ผลงานและกิจกรรม</Link>
             <span className="text-white/70 hidden sm:inline" aria-hidden="true">›</span>
             <b className="hidden sm:inline text-white/90 font-semibold truncate max-w-[260px]">{excerpt(work.title, 40)}</b>
           </nav>
@@ -73,14 +65,15 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
             <div className="min-w-0">
               <div className="flex flex-wrap gap-2">
                 <span className="chip bg-white/20 backdrop-blur text-white border border-white/30">
-                  {theme.icon} ด้านที่ {domain} · ตัวชี้วัด {work.indicator_code}
+                  📁 ผลงานทั่วไป
                 </span>
                 {work.is_featured === 1 && <span className="chip chip-accent">⭐ ผลงานเด่น</span>}
-                <span className="chip chip-glass">📅 ปีการศึกษา {work.academic_year} · ภาคเรียนที่ {work.semester}</span>
+                {work.academic_year && (
+                  <span className="chip chip-glass">📅 ปี พ.ศ. {work.academic_year}</span>
+                )}
               </div>
 
-              <p className="mt-5 text-[12px] font-bold tracking-[.14em] uppercase text-white/85">{work.indicator_name}</p>
-              <h1 className="mt-1.5 text-[26px] md:text-[38px] font-extrabold leading-tight tracking-tight drop-shadow-sm">{work.title}</h1>
+              <h1 className="mt-4 text-[26px] md:text-[38px] font-extrabold leading-tight tracking-tight drop-shadow-sm">{work.title}</h1>
 
               <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] font-medium text-white/90">
                 <span>🗓️ เผยแพร่ {thaiDate(work.work_date, false)}</span>
@@ -99,8 +92,7 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
       <section className="max-w-[1240px] mx-auto px-4 md:px-10 -mt-6 md:-mt-8 pb-12 relative z-10">
         <div className="grid lg:grid-cols-[1.65fr_.85fr] gap-6 lg:gap-7 items-start">
 
-          {/* ================= คอลัมน์ซ้าย ================= */}
-          {/* min-w-0 สำคัญมาก: กันไม่ให้ความกว้างธรรมชาติของรูปดันคอลัมน์กริดจนล้นจอ */}
+          {/* คอลัมน์ซ้าย */}
           <div className="min-w-0">
             {images.length > 0 ? (
               <WorkGallery images={galleryImages} title={work.title} />
@@ -111,10 +103,9 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
               </div>
             )}
 
-            {/* เนื้อหา */}
             <article className="mt-7 card-soft rounded-[2rem] p-6 md:p-9">
               <div className="flex items-center gap-2.5 mb-5">
-                <span className="w-10 h-10 rounded-2xl grid place-items-center text-lg text-white shrink-0" style={{ background: theme.grad }}>📖</span>
+                <span className="w-10 h-10 rounded-2xl grad-bg grid place-items-center text-lg text-white shrink-0">📖</span>
                 <h2 className="font-extrabold text-[18px] md:text-[20px] leading-tight">รายละเอียด<span className="grad-text">ผลงาน</span></h2>
               </div>
 
@@ -151,30 +142,20 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
             </article>
           </div>
 
-          {/* ================= คอลัมน์ขวา ================= */}
+          {/* คอลัมน์ขวา */}
           <aside className="min-w-0 flex flex-col gap-4">
-
-            {/* ข้อมูลผลงาน */}
             <div className="card-soft rounded-[1.8rem] p-5 md:p-6">
               <div className="flex items-center gap-2.5 mb-4">
-                <span className="w-9 h-9 rounded-xl grid place-items-center text-base shrink-0" style={{ background: theme.soft }}>📌</span>
+                <span className="w-9 h-9 rounded-xl grad-soft grid place-items-center text-base shrink-0">📌</span>
                 <h2 className="font-extrabold text-[15.5px]">ข้อมูลผลงาน</h2>
               </div>
               <dl className="flex flex-col divide-y divide-[color:var(--divider)] text-[12.5px]">
                 <div className="flex justify-between gap-3 py-2.5">
-                  <dt className="text-ink-muted shrink-0">ด้าน</dt>
-                  <dd className="font-bold text-right" style={{ color: theme.deep }}>{theme.icon} ด้านที่ {domain}</dd>
+                  <dt className="text-ink-muted shrink-0">ปี พ.ศ.</dt>
+                  <dd className="font-bold text-right">{work.academic_year || '—'}</dd>
                 </div>
                 <div className="flex justify-between gap-3 py-2.5">
-                  <dt className="text-ink-muted shrink-0">ตัวชี้วัด</dt>
-                  <dd className="font-bold text-right">{work.indicator_code} {(work.indicator_name ?? '').slice(0, 26)}</dd>
-                </div>
-                <div className="flex justify-between gap-3 py-2.5">
-                  <dt className="text-ink-muted shrink-0">ปีการศึกษา</dt>
-                  <dd className="font-bold text-right">{work.academic_year} · ภาคเรียนที่ {work.semester}</dd>
-                </div>
-                <div className="flex justify-between gap-3 py-2.5">
-                  <dt className="text-ink-muted shrink-0">วันที่จัดทำ</dt>
+                  <dt className="text-ink-muted shrink-0">วันที่เผยแพร่</dt>
                   <dd className="font-bold text-right">{thaiDate(work.work_date)}</dd>
                 </div>
                 <div className="flex justify-between gap-3 py-2.5">
@@ -184,7 +165,6 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
               </dl>
             </div>
 
-            {/* ไฟล์แนบ */}
             {files.length > 0 && (
               <div className="card-soft rounded-[1.8rem] p-5 md:p-6">
                 <div className="flex items-center gap-2.5 mb-4">
@@ -210,7 +190,6 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
               </div>
             )}
 
-            {/* ผลงานที่เกี่ยวข้อง */}
             {related.length > 0 && (
               <div className="card-soft rounded-[1.8rem] p-5 md:p-6">
                 <div className="flex items-center gap-2.5 mb-4">
@@ -218,49 +197,37 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
                   <h2 className="font-extrabold text-[15.5px]">ผลงานที่เกี่ยวข้อง</h2>
                 </div>
                 <div className="flex flex-col gap-2">
-                  {related.map((r) => {
-                    const rt = domainTheme(r.domain_code)
-                    return (
-                      <Link key={r.id} href={`/work/${r.slug}`}
-                        className="group flex gap-3 items-center p-2 -mx-2 rounded-2xl transition hover:bg-primary-soft/40">
-                        <span className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 bg-[color:var(--divider)]">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={imageUrl({ source: r.cover_source, ref: r.cover_ref }, IMG.thumb)} alt=""
-                            width={128} height={128} loading="lazy"
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                  {related.map((r) => (
+                    <Link key={r.id} href={`/work/${r.slug}`}
+                      className="group flex gap-3 items-center p-2 -mx-2 rounded-2xl transition hover:bg-primary-soft/40">
+                      <span className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 bg-[color:var(--divider)]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imageUrl({ source: r.cover_source, ref: r.cover_ref }, IMG.thumb)} alt=""
+                          width={128} height={128} loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[12.5px] font-bold leading-snug line-2 group-hover:text-primary-deep transition-colors">{r.title}</span>
+                        <span className="mt-1 inline-flex items-center gap-1.5 text-[10.5px] font-bold text-ink-muted">
+                          📅 {r.academic_year}
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-[12.5px] font-bold leading-snug line-2 group-hover:text-primary-deep transition-colors">{r.title}</span>
-                          <span className="mt-1 inline-flex items-center gap-1.5 text-[10.5px] font-bold" style={{ color: rt.deep }}>
-                            <span className="w-2 h-2 rounded-full inline-block" style={{ background: rt.solid }} />
-                            ตัวชี้วัด {r.indicator_code} · {r.semester}/{r.academic_year}
-                          </span>
-                        </span>
-                        <span className="text-ink-faint group-hover:text-primary-deep group-hover:translate-x-1 transition-all" aria-hidden="true">→</span>
-                      </Link>
-                    )
-                  })}
+                      </span>
+                      <span className="text-ink-faint group-hover:text-primary-deep group-hover:translate-x-1 transition-all" aria-hidden="true">→</span>
+                    </Link>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* ================= ผลงานก่อนหน้า / ถัดไป ================= */}
-            {(neighbors.prev || neighbors.next || indicatorTotal > 1) && (
-              <nav className="flex flex-col gap-3" aria-label="ผลงานอื่นในตัวชี้วัดเดียวกัน">
-                <div className="flex items-start gap-2.5 px-1">
-                  <span className={`chip chip-${domain} shrink-0`}>ตัวชี้วัด {work.indicator_code}</span>
-                  <p className="text-[12px] text-ink-muted leading-snug pt-1">{work.indicator_name}</p>
-                </div>
-
+            {(neighbors.prev || neighbors.next) && (
+              <nav className="flex flex-col gap-3" aria-label="ผลงานอื่น">
                 {neighbors.prev && (
                   <Link href={`/work/${neighbors.prev.slug}`}
                     className="card-pop group flex items-center gap-3.5 !rounded-[1.5rem] px-4 py-3.5 min-h-[44px]">
-                    <span className="w-11 h-11 shrink-0 rounded-full bg-primary-soft text-primary-deep grid place-items-center text-lg
-                                     font-extrabold transition group-hover:bg-[image:var(--grad)] group-hover:text-white group-hover:-translate-x-0.5" aria-hidden="true">←</span>
+                    <span className="w-11 h-11 shrink-0 rounded-full bg-primary-soft text-primary-deep grid place-items-center text-lg font-extrabold transition group-hover:bg-[image:var(--grad)] group-hover:text-white" aria-hidden="true">←</span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[10.5px] font-extrabold tracking-[.1em] uppercase text-primary-deep">ผลงานก่อนหน้า</span>
                       <span className="block text-[13px] font-bold leading-snug line-2 mt-0.5">{neighbors.prev.title}</span>
-                      <span className="block text-[10.5px] text-ink-muted mt-0.5">📅 {thaiDate(neighbors.prev.work_date)}</span>
                     </span>
                   </Link>
                 )}
@@ -271,22 +238,15 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
                     <span className="min-w-0 flex-1 text-right">
                       <span className="block text-[10.5px] font-extrabold tracking-[.1em] uppercase text-primary-deep">ผลงานถัดไป</span>
                       <span className="block text-[13px] font-bold leading-snug line-2 mt-0.5">{neighbors.next.title}</span>
-                      <span className="block text-[10.5px] text-ink-muted mt-0.5">📅 {thaiDate(neighbors.next.work_date)}</span>
                     </span>
-                    <span className="w-11 h-11 shrink-0 rounded-full bg-primary-soft text-primary-deep grid place-items-center text-lg
-                                     font-extrabold transition group-hover:bg-[image:var(--grad)] group-hover:text-white group-hover:translate-x-0.5" aria-hidden="true">→</span>
+                    <span className="w-11 h-11 shrink-0 rounded-full bg-primary-soft text-primary-deep grid place-items-center text-lg font-extrabold transition group-hover:bg-[image:var(--grad)] group-hover:text-white" aria-hidden="true">→</span>
                   </Link>
                 )}
-
-                <Link href={`/indicator/${work.indicator_id}`}
-                  className="btn btn-ghost w-full text-[12.5px] !whitespace-normal !leading-snug text-center">
-                  ดูผลงานทั้งหมดในตัวชี้วัด {work.indicator_code} ({indicatorTotal} ชิ้น)
-                </Link>
               </nav>
             )}
 
             <AdminOnly>
-              <Link href={`/admin/indicator/${work.indicator_id}?edit=${work.id}`} className="btn btn-ink w-full">
+              <Link href={`/admin/works?edit=${work.id}`} className="btn btn-ink w-full">
                 ✏️ แก้ไขผลงานนี้
               </Link>
             </AdminOnly>
