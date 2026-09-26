@@ -210,3 +210,39 @@ export const getHomeStats = cache(async () => {
     works_by_attr: new Map(attrCounts.map(r => [r.code, Number(r.total)]))
   }
 })
+
+/* ---------------- การพัฒนาตนเอง / ชั่วโมงอบรม ---------------- */
+
+export interface SelfDevelopment {
+  id: number
+  title: string
+  organizer: string
+  start_date: string | null
+  end_date: string | null
+  hours: number
+  fiscal_year: number
+  certificate_no: string
+  source: 'drive' | 'static' | null
+  ref: string | null
+  created_at: string
+}
+
+export async function getSelfDevs(fiscalYear?: number) {
+  const where = ['deleted_at IS NULL']
+  const args: (string | number)[] = []
+  if (fiscalYear) {
+    where.push('fiscal_year = ?')
+    args.push(fiscalYear)
+  }
+  return all<SelfDevelopment>(
+    `SELECT * FROM self_developments WHERE ${where.join(' AND ')} ORDER BY start_date DESC, id DESC`,
+    args
+  )
+}
+
+export async function getSelfDevYears() {
+  const rows = await all<{ fiscal_year: number }>(
+    'SELECT DISTINCT fiscal_year FROM self_developments WHERE deleted_at IS NULL ORDER BY fiscal_year DESC'
+  )
+  return rows.map((r) => Number(r.fiscal_year))
+}
