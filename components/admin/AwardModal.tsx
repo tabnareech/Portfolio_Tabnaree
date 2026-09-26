@@ -2,51 +2,56 @@
 
 import { createContext, useContext, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import Modal from './Modal'
-import DriveLinkInput from './DriveLinkInput'
-import SectionHead from './ModalSectionHead'
-import { ImageSection, FileSection, type ImageRow, type FileRow } from './MediaEditor'
+import Modal from '@/components/Modal'
 import { getAwardForEdit, saveAward } from '@/lib/item-actions'
-import { toastSuccess, toastError, alertError, fireConfetti } from '@/lib/ui'
-import type { MediaSource } from '@/lib/media'
-
-export const LEVELS = ['โรงเรียน', 'เขตพื้นที่', 'จังหวัด', 'ภาค', 'ชาติ', 'นานาชาติ'] as const
+import { alertError, toastError, toastSuccess, fireConfetti } from '@/lib/ui'
+import DriveLinkInput from './DriveLinkInput'
+import ImageSection from './ImageSection'
+import FileSection from './FileSection'
 
 interface Draft {
   id: number; title: string; awarder: string; level: string; award_date: string
-  image_source: MediaSource | null; image_ref: string | null
-  note: string; summary: string; content: string
-  video_url: string; link_url: string; link_label: string
-  images: ImageRow[]; files: FileRow[]
-  existing: boolean
+  note: string; summary: string; content: string; video_url: string
+  link_url: string; link_label: string
+  image_source: string; image_ref: string
+  images: { source: string; ref: string; note: string }[]
+  files: { source: string; ref: string; title: string }[]
+  existing?: boolean
 }
 
 const BLANK: Draft = {
-  id: 0, title: '', awarder: '', level: 'โรงเรียน', award_date: '',
-  image_source: null, image_ref: null, note: '', summary: '', content: '',
-  video_url: '', link_url: '', link_label: '', images: [], files: [], existing: false,
+  id: 0, title: '', awarder: '', level: 'หน่วยงาน/สถานศึกษา', award_date: '',
+  note: '', summary: '', content: '', video_url: '', link_url: '', link_label: '',
+  image_source: '', image_ref: '', images: [], files: [],
 }
 
-interface Api { add: () => void; edit: (id: number) => void }
-const Ctx = createContext<Api | null>(null)
+const LEVELS = ['หน่วยงาน/สถานศึกษา', 'เขตพื้นที่การศึกษา', 'จังหวัด', 'ภาค', 'ชาติ', 'นานาชาติ']
 
-export const useAwardModal = () => {
-  const api = useContext(Ctx)
-  if (!api) throw new Error('ต้องอยู่ใน <AwardProvider>')
-  return api
+const Ctx = createContext<{ add: () => void; edit: (id: number) => void }>({
+  add: () => {}, edit: () => {},
+})
+
+export const useAwardModal = () => useContext(Ctx)
+
+function SectionHead({ icon, children, bg, extra }: { icon: string; children: React.ReactNode; bg: string; extra?: string }) {
+  return (
+    <div className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl ${bg} mb-3.5`}>
+      <span className="flex items-center gap-2 font-bold text-[13.5px] text-ink">
+        <span className="text-base">{icon}</span>{children}
+      </span>
+      {extra && <span className="text-[11px] text-ink-muted">{extra}</span>}
+    </div>
+  )
 }
 
 /**
- * โมดัลเพิ่ม/แก้ไขรางวัล — ยกมาจาก modalAward ของ admin/awards.php
- *
- * ต่างจากเว็บ PHP ตรงที่รูปปก รูปในแกลเลอรี และไฟล์แนบใช้ “วางลิงก์ Google Drive”
- * แทนการอัปโหลด จึงเพิ่มได้ตั้งแต่ตอนสร้างรายการ ไม่ต้องบันทึกก่อนเหมือนเดิม
+ * โมดอลเพิ่ม/แก้ไขรางวัล – แปลงมาจาก modalAward ของ admin/awards.php
  */
 export function AwardProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [d, setD] = useState<Draft>(BLANK)
-  const [err, setErr] = useState('')
+  const [, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [, startTransition] = useTransition()
@@ -74,7 +79,7 @@ export function AwardProvider({ children }: { children: React.ReactNode }) {
     try {
       const isNew = !d.id
       const r = await saveAward(f)
-      if (!r.ok) { setErr(r.error); toastError(r.error); return }
+      if (!r.ok) { setErr(r.error ?? ''); toastError(r.error || 'บันทึกไม่สำเร็จ'); return }
       if (isNew) fireConfetti()
       toastSuccess(isNew ? 'เพิ่มรางวัลสำเร็จ!' : 'บันทึกรางวัลสำเร็จ!')
       setOpen(false)
@@ -98,25 +103,24 @@ export function AwardProvider({ children }: { children: React.ReactNode }) {
           <div className="modal-body">
             {loading ? (
               <p className="py-16 text-center text-ink-muted text-[13px]">
-                <span className="spin inline-block mr-1">⏳</span> กำลังโหลด…
+                <span className="spin inline-block mr-1">⏳</span> กำลังโหลด...
               </p>
             ) : (
               <>
-                {/* ══════════ ข้อมูลหลัก ══════════ */}
                 <SectionHead icon="📋" bg="bg-primary-soft">ข้อมูลหลัก</SectionHead>
 
                 <div className="mb-4">
                   <label className="lbl req" htmlFor="aw_title">ชื่อรางวัล</label>
                   <input className="inp" id="aw_title" name="title" required maxLength={255}
-                    placeholder="เช่น ครูดีในดวงใจ"
+                    placeholder="เช่น ผลงานยอดเยี่ยม..."
                     value={d.title} onChange={(e) => set('title', e.target.value)} />
-                  <span className="field-error">{err}</span>
+                  <span className="field-error"></span>
                 </div>
 
                 <div className="mb-4">
                   <label className="lbl" htmlFor="aw_by">หน่วยงานที่มอบ</label>
                   <input className="inp" id="aw_by" name="awarder" maxLength={200}
-                    placeholder="สพฐ. / สพม. / คุรุสภา…"
+                    placeholder="เช่น สพฐ. / สพม. / ครุสภา..."
                     value={d.awarder} onChange={(e) => set('awarder', e.target.value)} />
                   <span className="field-error"></span>
                 </div>
@@ -146,13 +150,12 @@ export function AwardProvider({ children }: { children: React.ReactNode }) {
                   <span className="field-error"></span>
                 </div>
 
-                {/* ══════════ รายละเอียด ══════════ */}
                 <SectionHead icon="📝" bg="bg-mint-soft" extra="(แสดงบนหน้ารายละเอียดรางวัล)">รายละเอียด</SectionHead>
 
                 <div className="mb-4">
                   <label className="lbl" htmlFor="aw_summary">คำโปรย / สรุปสั้น</label>
                   <input className="inp" id="aw_summary" name="summary" maxLength={500}
-                    placeholder="สรุปสั้น ๆ 1–2 บรรทัด แสดงใต้ชื่อรางวัล"
+                    placeholder="สรุปสั้น ๆ 1-2 บรรทัด แสดงใต้ชื่อรางวัล"
                     value={d.summary} onChange={(e) => set('summary', e.target.value)} />
                   <span className="field-error"></span>
                 </div>
@@ -160,22 +163,20 @@ export function AwardProvider({ children }: { children: React.ReactNode }) {
                 <div className="mb-5">
                   <label className="lbl" htmlFor="aw_content">รายละเอียด</label>
                   <textarea className="inp font-mono text-[12.5px]" id="aw_content" name="content" rows={8}
-                    placeholder="<h3>🏆 ที่มาของรางวัล</h3><p>…</p><h3>🌟 ผลงานที่ส่งเข้าประกวด</h3><ul><li>…</li></ul>"
+                    placeholder="<h3>🏆 ที่มาของรางวัล</h3><p>...</p>"
                     value={d.content} onChange={(e) => set('content', e.target.value)} />
                   <span className="field-error"></span>
                   <p className="text-[11.5px] text-ink-muted mt-1.5">
-                    รองรับ HTML อย่างง่าย: <code className="bg-[color:var(--divider)] rounded px-1">&lt;h3&gt; &lt;p&gt; &lt;ul&gt; &lt;li&gt; &lt;b&gt;</code>
-                    {' '}· เว้นว่างได้ถ้ายังไม่มีข้อมูล
+                    รองรับ HTML อย่างง่าย: <code className="bg-[color:var(--divider)] rounded px-1">&lt;h3&gt;, &lt;p&gt;, &lt;ul&gt;, &lt;li&gt;</code> เว้นว่างได้ถ้ารายละเอียดไม่เยอะ
                   </p>
                 </div>
 
-                {/* ══════════ สื่อและลิงก์ ══════════ */}
                 <SectionHead icon="🔗" bg="bg-sky-soft">สื่อและลิงก์</SectionHead>
 
                 <div className="mb-4">
                   <label className="lbl" htmlFor="aw_video">ลิงก์วิดีโอ (YouTube)</label>
                   <input className="inp" id="aw_video" name="video_url" maxLength={255}
-                    placeholder="https://www.youtube.com/watch?v=…"
+                    placeholder="https://www.youtube.com/watch?v=..."
                     value={d.video_url} onChange={(e) => set('video_url', e.target.value)} />
                   <span className="field-error"></span>
                 </div>
@@ -183,7 +184,7 @@ export function AwardProvider({ children }: { children: React.ReactNode }) {
                 <div className="grid md:grid-cols-2 gap-4 mb-5">
                   <div>
                     <label className="lbl" htmlFor="aw_link">ลิงก์ที่เกี่ยวข้อง</label>
-                    <input className="inp" id="aw_link" name="link_url" maxLength={255} placeholder="https://…"
+                    <input className="inp" id="aw_link" name="link_url" maxLength={255} placeholder="https://..."
                       value={d.link_url} onChange={(e) => set('link_url', e.target.value)} />
                     <span className="field-error"></span>
                   </div>
@@ -203,12 +204,11 @@ export function AwardProvider({ children }: { children: React.ReactNode }) {
                   <DriveLinkInput key={d.id} name="image" id="aw_img" thumb
                     defaultSource={d.image_source} defaultRef={d.image_ref} />
                   <p className="text-[11.5px] text-ink-muted mt-2">
-                    วางลิงก์แชร์จาก Google Drive · ถ้าเว้นว่างไว้แต่มีรูปในแกลเลอรีด้านล่าง รูปแรกจะกลายเป็นปกโดยอัตโนมัติ
+                    วางลิงก์แชร์จาก Google Drive · ถ้าร่างว่างไว้แต่มีรูปในแกลเลอรีด้านล่าง รูปแรกจะกลายเป็นรูปปกอัตโนมัติ
                   </p>
                 </div>
 
-                {/* ══════════ รูปภาพและไฟล์แนบ ══════════ */}
-                <SectionHead icon="📎" bg="bg-sunny-soft">แกลเลอรีรูปและไฟล์แนบ</SectionHead>
+                <SectionHead icon="📁" bg="bg-sunny-soft">แกลเลอรีและไฟล์แนบ</SectionHead>
 
                 <ImageSection rows={d.images} onChange={(rows) => set('images', rows)} coverBadge
                   label="รูปภาพประกอบ (วางลิงก์แชร์จาก Google Drive · เพิ่มได้หลายรูป)"
@@ -231,7 +231,7 @@ export function AwardProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** ปุ่ม “+ เพิ่มรางวัล” — วางกี่จุดก็ได้ ใช้โมดัลกล่องเดียวกัน */
+/** ปุ่ม “+ เพิ่มรางวัล” – วางจุดใดก็ได้ ใช้โมดอลกล่องเดียวกัน */
 export function NewAwardButton({ className, children }: { className: string; children: React.ReactNode }) {
   const { add } = useAwardModal()
   return <button type="button" className={className} onClick={add}>{children}</button>
