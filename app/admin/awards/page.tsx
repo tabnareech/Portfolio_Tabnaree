@@ -6,7 +6,7 @@ import PageHead from '@/components/admin/PageHead'
 import { AwardProvider, NewAwardButton } from '@/components/admin/AwardModal'
 import AwardGrid, { type AwardCard } from '@/components/admin/AwardGrid'
 
-/** จัดการรางวัล/เกียรติคุณ — แปลงจาก admin/awards.php */
+/** จัดการรางวัลและเกียรติคุณ */
 export default async function AwardsAdmin() {
   await requireAdmin()   // ต้องตรวจในทุกหน้า ไม่ใช่แค่ layout — Next render layout กับ page พร้อมกัน
 
@@ -38,7 +38,7 @@ export default async function AwardsAdmin() {
     <AwardProvider>
       <PageHead
         title="รางวัลและเกียรติคุณ 🏅"
-        sub="แสดงบนหน้าประวัติครูและตัวเลขสถิติหน้าแรก"
+        sub="แสดงบนหน้าประวัติและตัวเลขสถิติหน้าแรก"
         actions={<NewAwardButton className="btn btn-primary text-[12.5px]">+ เพิ่มรางวัล</NewAwardButton>}
       />
 
