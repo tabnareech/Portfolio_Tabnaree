@@ -10,7 +10,7 @@ import type { Education } from '@/lib/types'
 interface Draft { id: number; year_th: string; degree: string; institute: string; sort_order: number }
 const BLANK: Draft = { id: 0, year_th: '', degree: '', institute: '', sort_order: 1 }
 
-/** การ์ด “วุฒิการศึกษา” พร้อมตารางและโมดัล — ยกมาจาก admin/profile.php */
+/** การ์ด “วุฒิการศึกษา” พร้อมตารางและโมดอล – ยกมาจาก admin/profile.php */
 export default function EducationSection({ rows }: { rows: Education[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -62,7 +62,7 @@ export default function EducationSection({ rows }: { rows: Education[] }) {
           <span className="w-10 h-10 rounded-2xl grid place-items-center text-lg bg-sky-soft shrink-0">🎓</span>
           <div>
             <h2 className="font-bold text-[16px]">วุฒิการศึกษา</h2>
-            <p className="text-[12px] text-ink-muted">{rows.length} รายการ · เรียงตามลำดับการแสดง</p>
+            <p className="text-[12px] text-ink-muted">{rows.length} รายการ · เรียงลำดับการแสดง</p>
           </div>
         </div>
         <button type="button" className="btn btn-ghost btn-sm" onClick={add}>+ เพิ่มวุฒิการศึกษา</button>
@@ -71,7 +71,9 @@ export default function EducationSection({ rows }: { rows: Education[] }) {
       {rows.length > 0 ? (
         <div className="overflow-x-auto mt-4">
           <table className="adm-table min-w-[560px] md:min-w-0">
-            <thead><tr><th className="col-no">#</th><th>ปี พ.ศ.</th><th>วุฒิการศึกษา</th><th>สถาบัน</th><th>จัดการ</th></tr></thead>
+            <thead>
+              <tr><th className="col-no">#</th><th>ปี พ.ศ.</th><th>วุฒิการศึกษา</th><th>สถาบัน</th><th>จัดการ</th></tr>
+            </thead>
             <tbody>
               {rows.map((ed, i) => (
                 <tr key={ed.id}>
@@ -110,19 +112,21 @@ export default function EducationSection({ rows }: { rows: Education[] }) {
                 <span className="field-error">{err}</span>
               </div>
               <div>
-                <label className="lbl req" htmlFor="e_degree">ชื่อวุฒิการศึกษา</label>
+                <label className="lbl req" htmlFor="e_degree">วุฒิการศึกษา</label>
                 <input className="inp" id="e_degree" name="degree" required maxLength={200}
-                  placeholder="ศึกษาศาสตรมหาบัณฑิต (ศษ.ม.) สาขา…"
+                  placeholder="เช่น กศ.ม. (การบริหารการศึกษา) หรือ ศษ.ม. ..."
                   value={d.degree} onChange={(ev) => set('degree', ev.target.value)} />
                 <span className="field-error"></span>
               </div>
             </div>
+
             <div className="mb-4">
               <label className="lbl" htmlFor="e_inst">สถาบัน</label>
-              <input className="inp" id="e_inst" name="institute" maxLength={200} placeholder="มหาวิทยาลัย…"
+              <input className="inp" id="e_inst" name="institute" maxLength={200} placeholder="เช่น มหาวิทยาลัย..."
                 value={d.institute} onChange={(ev) => set('institute', ev.target.value)} />
               <span className="field-error"></span>
             </div>
+
             <div className="flex items-center gap-3 bg-primary-soft/60 rounded-2xl px-4 py-3">
               <span className="text-lg">🔢</span>
               <label className="text-[12.5px] font-semibold text-ink-soft flex-1" htmlFor="e_sort">
@@ -132,6 +136,7 @@ export default function EducationSection({ rows }: { rows: Education[] }) {
                 value={d.sort_order} onChange={(ev) => set('sort_order', Number(ev.target.value))} />
             </div>
           </div>
+
           <div className="modal-foot">
             <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>ยกเลิก</button>
             <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'กำลังบันทึก…' : '💾 บันทึก'}</button>
