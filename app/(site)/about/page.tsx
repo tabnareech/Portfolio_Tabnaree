@@ -1,16 +1,15 @@
 import Link from 'next/link'
-import { getProfile, getEducations, getCareerPaths, getAwards } from '@/lib/queries'
+import { getProfile, getEducations, getCareerPaths } from '@/lib/queries'
 import { imageUrl, IMG } from '@/lib/media'
 
-export const metadata = { title: 'ประวัติครู' }
+export const metadata = { title: 'เกี่ยวกับฉัน' }
 
 /**
- * หน้าประวัติครู — แปลงมาจาก about.php ของเว็บ PHP ให้โครงสร้างและข้อความตรงกัน
- *   HERO โปรไฟล์ → แนะนำตัว → วุฒิการศึกษา (ไทม์ไลน์) + เส้นทางรับราชการ
+ * หน้าประวัติส่วนตัวของคุณเทพนรี (นักวิชาการศึกษา)
  */
 export default async function AboutPage() {
-  const [profile, educs, careers, awards] = await Promise.all([
-    getProfile(), getEducations(), getCareerPaths(), getAwards(),
+  const [profile, educs, careers] = await Promise.all([
+    getProfile(), getEducations(), getCareerPaths(),
   ])
 
   /* ช่องทางติดต่อบน hero (chips) */
@@ -23,6 +22,11 @@ export default async function AboutPage() {
   const bio = profile?.bio ?? ''
   const bioHtml = bio.includes('<') ? bio : `<p>${bio}</p>`
 
+  // แยกชื่อ–สกุล
+  const nameParts = (profile?.full_name ?? '').trim().split(/\s+/)
+  const firstName = nameParts[0] ?? ''
+  const lastName = nameParts.slice(1).join(' ')
+
   return (
     <main>
       {/* ================= HERO โปรไฟล์ ================= */}
@@ -33,7 +37,7 @@ export default async function AboutPage() {
         <div className="relative max-w-[1240px] mx-auto px-4 md:px-10 pt-10 md:pt-14 pb-12
                         grid lg:grid-cols-[380px_1fr] gap-10 lg:gap-14 items-center">
 
-          {/* รูปครู */}
+          {/* รูปโปรไฟล์ */}
           <div className="relative min-w-0 flex justify-center lg:justify-start">
             <div className="relative w-full max-w-[340px]">
               <div className="absolute -inset-3 rounded-[2.8rem] grad-bg opacity-30 blur-2xl" />
@@ -41,64 +45,41 @@ export default async function AboutPage() {
                 <div className="rounded-[2.3rem] overflow-hidden aspect-[4/5] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={imageUrl({ source: profile?.avatar_source ?? null, ref: profile?.avatar_ref ?? null }, IMG.avatar)}
-                    alt={`รูปครู${profile?.nickname ?? ''}`}
+                    alt={`รูปโปรไฟล์ ${profile?.full_name ?? ''}`}
                     className="w-full h-full object-cover object-top" />
                 </div>
               </div>
-
-              {profile?.experience_years ? (
-                <div className="sticker absolute -right-2 md:-right-8 top-8 float">
-                  <span className="w-10 h-10 rounded-xl bg-sky-soft grid place-items-center text-xl">🧭</span>
-                  <span className="leading-tight">
-                    <span className="block font-bold text-[15px]">{profile.experience_years} ปี</span>
-                    <span className="block text-[10.5px] text-ink-muted">ประสบการณ์สอน</span>
-                  </span>
-                </div>
-              ) : null}
-
-              {awards.length > 0 && (
-                <div className="sticker absolute -left-3 md:-left-8 bottom-10 float-slow">
-                  <span className="w-10 h-10 rounded-xl bg-sunny-soft grid place-items-center text-xl">🏆</span>
-                  <span className="leading-tight">
-                    <span className="block font-bold text-[15px]">{awards.length} รางวัล</span>
-                    <span className="block text-[10.5px] text-ink-muted">เกียรติคุณที่ได้รับ</span>
-                  </span>
-                </div>
-              )}
             </div>
           </div>
 
           {/* ข้อความ */}
           <div className="min-w-0 text-center lg:text-left">
             <div className="flex flex-wrap justify-center lg:justify-start gap-2">
-              <span className="chip chip-glass">👩‍🏫 ประวัติครู</span>
-              {profile?.nickname && <span className="chip chip-ink">ครู{profile.nickname}</span>}
+              <span className="chip chip-glass">👩‍💻 เกี่ยวกับฉัน</span>
+              {profile?.nickname && <span className="chip chip-ink">{profile.nickname}</span>}
             </div>
 
             <h1 className="mt-5 text-[34px] md:text-[50px] font-extrabold leading-[1.08] tracking-tight">
-              <span className="grad-text">{profile?.full_name}</span>
+              {firstName} <span className="grad-text">{lastName}</span>
             </h1>
 
             <div className="mt-4 flex flex-col gap-1">
               <p className="text-[16px] md:text-[18px] font-semibold text-ink">
-                {profile?.position} วิทยฐานะ{profile?.academic_standing}
+                {profile?.position}
               </p>
-              {profile?.subject_group && (
-                <p className="text-[15px] md:text-[16px] font-medium text-ink-soft">กลุ่มสาระ{profile.subject_group}</p>
-              )}
-              {profile?.school && (
-                <p className="text-[13px] md:text-sm text-ink-muted">
-                  🏫 {profile.school}{profile.area_office ? ` · ${profile.area_office}` : ''}
+              {profile?.affiliation && (
+                <p className="text-[14px] md:text-sm text-ink-muted">
+                  🏛️ {profile.affiliation}
                 </p>
               )}
             </div>
 
-            {profile?.philosophy && (
+            {profile?.motto && (
               <div className="mt-5 inline-flex items-start gap-3 glass rounded-2xl px-5 py-3.5 shadow-soft text-left max-w-[560px]">
                 <span className="w-9 h-9 rounded-full grad-bg grid place-items-center text-white text-base shrink-0">💡</span>
                 <span>
-                  <span className="block text-[11px] font-extrabold text-primary-deep tracking-wide">ปรัชญาการสอน</span>
-                  <span className="block italic text-[14px] text-ink-soft font-medium">“{profile.philosophy}”</span>
+                  <span className="block text-[11px] font-extrabold text-primary-deep tracking-wide">คติประจำใจ</span>
+                  <span className="block italic text-[14px] text-ink-soft font-medium">“{profile.motto}”</span>
                 </span>
               </div>
             )}
@@ -121,8 +102,8 @@ export default async function AboutPage() {
             )}
 
             <div className="mt-7 flex flex-wrap justify-center lg:justify-start gap-3">
-              <Link href="/pa" className="btn btn-primary text-[15px] px-7 !min-h-[50px]">ดูผลงานตามเกณฑ์ วPA →</Link>
-              <Link href="/contact" className="btn btn-white text-[15px] px-6 !min-h-[50px]">✉️ ติดต่อครู</Link>
+              <Link href="/development" className="btn btn-primary text-[15px] px-7 !min-h-[50px]">ดูผลงานทั้งหมด →</Link>
+              <Link href="/contact" className="btn btn-white text-[15px] px-6 !min-h-[50px]">✉️ ติดต่อ</Link>
             </div>
           </div>
         </div>
@@ -135,18 +116,18 @@ export default async function AboutPage() {
             <div>
               <span className="chip chip-primary">👋 แนะนำตัว</span>
               <h2 className="mt-3 text-[26px] md:text-[34px] font-extrabold leading-tight">
-                รู้จัก<span className="grad-text">ครู{profile?.nickname ?? ''}</span>
+                รู้จัก<span className="grad-text">เทพนรี</span>
               </h2>
-              <p className="mt-1 text-[13.5px] text-ink-muted">เรื่องราว แนวคิด และความตั้งใจในการจัดการเรียนรู้</p>
+              <p className="mt-1 text-[13.5px] text-ink-muted">ประวัติการทำงานและแนวคิดในการปฏิบัติงาน</p>
             </div>
             <div className="rich min-w-0" dangerouslySetInnerHTML={{ __html: bioHtml }} />
           </div>
         </section>
       )}
 
-      {/* ================= วุฒิการศึกษา + เส้นทางราชการ ================= */}
+      {/* ================= วุฒิการศึกษา + เส้นทางรับราชการ ================= */}
       {(educs.length > 0 || careers.length > 0) && (
-        <section className="max-w-[1240px] mx-auto px-4 md:px-10 pt-14">
+        <section className="max-w-[1240px] mx-auto px-4 md:px-10 pt-14 pb-14">
           <div className="grid lg:grid-cols-[.9fr_1.1fr] gap-6 items-start">
 
             {educs.length > 0 && (
@@ -160,7 +141,7 @@ export default async function AboutPage() {
                   {educs.map((ed, i) => (
                     <li key={ed.id} className={`relative pl-10 ${i === educs.length - 1 ? '' : 'pb-6'}`}>
                       <span className={`absolute left-0 top-1 w-5 h-5 rounded-full grad-bg ring-4 ring-white ${i === 0 ? 'shadow-glow pulse' : 'shadow-soft'}`} />
-                      <span className="chip chip-primary !text-[11px]">พ.ศ. {ed.year_th}</span>
+                      <span className="chip chip-primary !text-[11px]">พ.ศ. {ed.year_be}</span>
                       <p className="text-[15px] font-bold mt-1.5 leading-snug">{ed.degree}</p>
                       <p className="text-[12.5px] text-ink-muted mt-0.5">{ed.institute}</p>
                     </li>
@@ -172,7 +153,7 @@ export default async function AboutPage() {
             {careers.length > 0 && (
               <div className="card-soft rounded-[2rem] p-6 md:p-8">
                 <span className="chip chip-2">🧭 เส้นทาง</span>
-                <h2 className="mt-3 text-[26px] md:text-[30px] font-extrabold leading-tight">เส้นทาง<span className="grad-text">รับราชการ</span></h2>
+                <h2 className="mt-3 text-[26px] md:text-[30px] font-extrabold leading-tight">เส้นทาง<span className="grad-text">การทำงาน</span></h2>
 
                 <div className="mt-6 grid sm:grid-cols-2 gap-4">
                   {careers.map((c) => (
