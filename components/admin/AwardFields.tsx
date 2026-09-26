@@ -12,8 +12,8 @@ export default function AwardFields({ item }: { item?: Award | null }) {
           <input name="awarder" defaultValue={item?.awarder ?? ''} className={inputClass} />
         </Field>
         <Field label="ระดับ">
-          <select name="level" defaultValue={item?.level ?? 'โรงเรียน'} className={inputClass}>
-            {['โรงเรียน', 'เขตพื้นที่', 'จังหวัด', 'ภาค', 'ชาติ', 'นานาชาติ'].map((l) => (
+          <select name="level" defaultValue={item?.level ?? 'หน่วยงาน/สถานศึกษา'} className={inputClass}>
+            {['หน่วยงาน/สถานศึกษา', 'เขตพื้นที่การศึกษา', 'จังหวัด', 'ภาค', 'ชาติ', 'นานาชาติ'].map((l) => (
               <option key={l} value={l}>{l}</option>
             ))}
           </select>
