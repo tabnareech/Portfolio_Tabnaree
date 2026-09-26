@@ -3,7 +3,7 @@ import { getSelfDevYears } from '@/lib/queries'
 
 export async function generateMetadata({ params }: { params: Promise<{ year: string }> }) {
   const { year } = await params
-  return { title: `การพัฒนาตนเอง ปีงบประมาณ ${year}` }
+  return { title: `ผลงานและการปฏิบัติงาน (${year}) · พอร์ตโฟลิโอนักวิชาการศึกษา` }
 }
 
 /** สร้างหน้าของทุกปีงบประมาณไว้ล่วงหน้า */
