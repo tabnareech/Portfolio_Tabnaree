@@ -24,13 +24,31 @@ export interface Indicator {
 }
 
 export interface Work {
-  id: number; indicator_id: number; title: string; slug: string
-  summary: string; content: string | null
-  academic_year: number; semester: number; work_date: string | null
-  cover_source: MediaSource | null; cover_ref: string | null
-  video_url: string; tags: string; view_count: number
-  is_featured: number; status: string
-  indicator_code?: string; indicator_name?: string; domain_code?: number
+  id: number
+  indicator_id: number | null
+  title: string
+  slug: string
+
+  work_level: string
+  work_type: string
+  role: string
+
+  summary: string
+  content: string | null
+  work_date: string | null
+  location: string
+
+  cover_source: MediaSource | null
+  cover_ref: string | null
+  video_url: string
+  tags: string
+  view_count: number
+  is_featured: number
+  status: string
+
+  indicator_code?: string
+  indicator_name?: string
+  domain_code?: number
 }
 
 export interface WorkImage {
