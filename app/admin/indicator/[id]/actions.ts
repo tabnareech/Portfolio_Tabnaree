@@ -14,9 +14,20 @@ export interface ImageRow { id?: number; source: MediaSource; ref: string; capti
 export interface FileRow { id?: number; source: MediaSource; ref: string; original_name: string }
 
 export interface WorkEdit {
-  id: number; title: string; indicator_id: number; work_date: string
-  academic_year: number; semester: number; status: string
-  summary: string; content: string; video_url: string; tags: string
+  id: number
+  title: string
+  indicator_id: number
+  level: string
+  work_type: string
+  characteristic: string
+  work_date: string
+  academic_year: number
+  semester: number
+  status: string
+  summary: string
+  content: string
+  video_url: string
+  tags: string
   is_featured: number
   images: ImageRow[]
   files: FileRow[]
@@ -27,7 +38,8 @@ export async function getworkForEdit(id: number): Promise<WorkEdit | null> {
   await requireAdmin()
 
   const w = await one<Record<string, unknown>>(
-    'SELECT * FROM works WHERE id = ? AND deleted_at IS NULL', [id])
+    'SELECT * FROM works WHERE id = ? AND deleted_at IS NULL', [id]
+  )
   if (!w) return null
 
   const [images, files] = await Promise.all([
@@ -38,7 +50,10 @@ export async function getworkForEdit(id: number): Promise<WorkEdit | null> {
   return {
     id: Number(w.id),
     title: String(w.title ?? ''),
-    indicator_id: Number(w.indicator_id),
+    indicator_id: Number(w.indicator_id ?? 0),
+    level: String(w.level ?? 'province'),
+    work_type: String(w.work_type ?? ''),
+    characteristic: String(w.characteristic ?? 'ครองงาน'),
     work_date: String(w.work_date ?? ''),
     academic_year: Number(w.academic_year),
     semester: Number(w.semester),
@@ -48,7 +63,8 @@ export async function getworkForEdit(id: number): Promise<WorkEdit | null> {
     video_url: String(w.video_url ?? ''),
     tags: String(w.tags ?? ''),
     is_featured: Number(w.is_featured ?? 0),
-    images, files,
+    images,
+    files,
   }
 }
 
@@ -85,27 +101,33 @@ async function uniqueSlug(base: string, exceptId: number): Promise<string> {
 const today = () => new Date().toISOString().slice(0, 10)
 
 export async function savework(f: FormData): Promise<Result> {
-  await requireAdmin()   // ด่านตรวจ — ต้องมิทุก action
+  await requireAdmin()
 
   const id = int(f, 'id')
   const title = str(f, 'title', 255)
   if (!title) return { ok: false, error: 'กรุณากรอกชื่อผลงาน' }
 
   const indicatorId = int(f, 'indicator_id')
-  if (!await one('SELECT id FROM indicators WHERE id = ?', [indicatorId]))
-    return { ok: false, error: 'กรุณาเลือกตัวชี้วัด' }
+  
+  // รับค่า 3 มิติใหม่
+  const level = str(f, 'level', 50) || 'province'
+  const workType = str(f, 'work_type', 100) || 'ทั่วไป'
+  const characteristic = str(f, 'characteristic', 100) || 'ครองงาน'
 
   const year = int(f, 'academic_year')
-  if (year < 2500 || year > 2700) return { ok: false, error: 'ปีพุทธศักราชต้องอยู่ระหว่าง 2500–2700' }
+  if (year < 2500 || year > 2700) return { ok: false, error: 'ปีพุทธศักราชต้องอยู่ระหว่าง 2500-2700' }
 
-  if (id && !await one('SELECT id FROM works WHERE id = ? AND deleted_at IS NULL', [id]))
+  if (id && !await one('SELECT id FROM works WHERE id = ? AND deleted_at IS NULL', [id])) {
     return { ok: false, error: 'ไม่พบผลงานที่ต้องการแก้ไข' }
+  }
 
   const t = now()
   const common = [
-    indicatorId, title, str(f, 'summary', 500), str(f, 'content', 20000),
+    indicatorId, title, level, workType, characteristic,
+    str(f, 'summary', 500), str(f, 'content', 20000),
     year, Math.max(1, Math.min(3, int(f, 'semester', 1))),
-    str(f, 'work_date') ? str(f, 'work_date') : today(), str(f, 'video_url', 500), str(f, 'tags', 255),
+    str(f, 'work_date') ? str(f, 'work_date') : today(),
+    str(f, 'video_url', 500), str(f, 'tags', 255),
     f.get('is_featured') ? 1 : 0,
     pick(f, 'status', ['draft', 'published'] as const, 'published'), t,
   ]
@@ -113,40 +135,40 @@ export async function savework(f: FormData): Promise<Result> {
   let workId = id
   if (id) {
     await db.execute({
-      sql: `UPDATE works SET indicator_id=?, title=?, summary=?, content=?, academic_year=?,
-              semester=?, work_date=?, video_url=?, tags=?, is_featured=?, status=?, updated_at=?
+      sql: `UPDATE works SET indicator_id=?, title=?, level=?, work_type=?, characteristic=?,
+            summary=?, content=?, academic_year=?, semester=?, work_date=?,
+            video_url=?, tags=?, is_featured=?, status=?, updated_at=?
             WHERE id=?`,
       args: [...common, id],
     })
   } else {
     const slug = await uniqueSlug(slugify(title), 0)
     const res = await db.execute({
-      sql: `INSERT INTO works (indicator_id, title, summary, content, academic_year, semester,
-              work_date, video_url, tags, is_featured, status, updated_at, slug, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      sql: `INSERT INTO works (indicator_id, title, level, work_type, characteristic,
+            summary, content, academic_year, semester, work_date,
+            video_url, tags, is_featured, status, updated_at, slug, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [...common, slug, t],
     })
     workId = Number(res.lastInsertRowid)
   }
 
-  // รูปและไฟล์: เขียนทับทั้งชุดตามลำดับที่ครูจัดไว้
+  // รูปและไฟล์: เขียนทับทั้งชุดตามลำดับที่จัดไว้
   const images = parseRows(str(f, 'images', 60000))
   await db.execute({ sql: 'DELETE FROM work_images WHERE work_id = ?', args: [workId] })
   for (const [i, im] of images.entries()) {
     await db.execute({
-      sql: `INSERT INTO work_images (work_id, source, ref, caption, sort_order, created_at)
-            VALUES (?,?,?,?,?,?)`,
+      sql: 'INSERT INTO work_images (work_id, source, ref, caption, sort_order, created_at) VALUES (?,?,?,?,?,?)',
       args: [workId, im.source, im.ref, im.caption || `ภาพประกอบผลงาน ${title}`, i, t],
     })
   }
 
   const files = parseRows(str(f, 'files', 60000))
   await db.execute({ sql: 'DELETE FROM work_files WHERE work_id = ?', args: [workId] })
-  for (const [i, fl] of files.entries()) {
+  for (const [i, f1] of files.entries()) {
     await db.execute({
-      sql: `INSERT INTO work_files (work_id, source, ref, original_name, sort_order, created_st ?? created_at)
-            VALUES (?,?,?,?,?,?)`,
-      args: [workId, fl.source, fl.ref, fl.name, i, t],
+      sql: 'INSERT INTO work_files (work_id, source, ref, original_name, sort_order, created_at) VALUES (?,?,?,?,?,?)',
+      args: [workId, f1.source, f1.ref, f1.name, i, t],
     })
   }
 
