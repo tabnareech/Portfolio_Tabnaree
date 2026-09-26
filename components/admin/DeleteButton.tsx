@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-/** ปุ่มลบที่ต้องยืนยันก่อนเสมอ — กันกดพลาด */
+/** ปุ่มลบที่ต้องยืนยันก่อนเสมอ – กันกดพลาด */
 export default function DeleteButton({
   action, label, confirmText,
 }: { action: () => Promise<void>; label: string; confirmText: string }) {
@@ -18,7 +18,7 @@ export default function DeleteButton({
   }
   return (
     <span className="flex items-center gap-2 flex-wrap">
-      <span className="text-[12.5px] text-ink-muted">ลบ “{confirmText.slice(0, 40)}” ใช่ไหม?</span>
+      <span className="text-[12.5px] text-ink-muted">ลบ &ldquo;{confirmText.slice(0, 40)}&rdquo; ใช่ไหม?</span>
       <button type="button" onClick={() => setAsking(false)} className="btn btn-ghost !min-h-[36px] !text-[12.5px]">ไม่ลบ</button>
       <button type="submit" formAction={action}
         className="btn !min-h-[36px] !text-[12.5px] !bg-[#C0392B] !text-white">ยืนยันลบ</button>
