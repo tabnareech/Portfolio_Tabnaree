@@ -15,11 +15,11 @@ export interface AwardCard {
 }
 
 const CHIP: Record<string, string> = {
-  โรงเรียน: 'chip-1', เขตพื้นที่: 'chip-2', จังหวัด: 'chip-3',
-  ภาค: 'chip-accent', ชาติ: 'chip-accent', นานาชาติ: 'chip-accent',
+  'หน่วยงาน/สถานศึกษา': 'chip-1', 'เขตพื้นที่การศึกษา': 'chip-2', 'จังหวัด': 'chip-3',
+  'ภาค': 'chip-accent', 'ชาติ': 'chip-accent', 'นานาชาติ': 'chip-accent',
 }
 
-/** การ์ดรางวัลของหลังบ้าน — ยกมาจาก admin/awards.php */
+/** การ์ดตารางรางวัลของหลังบ้าน — อยกมาจาก admin/awards.php */
 export default function AwardGrid({ awards }: { awards: AwardCard[] }) {
   const router = useRouter()
   const { edit } = useAwardModal()
@@ -30,7 +30,7 @@ export default function AwardGrid({ awards }: { awards: AwardCard[] }) {
     try {
       const r = await deleteAward(a.id)
       if (!r.ok) { alertError(r.error || 'ลบไม่สำเร็จ'); return }
-      toastSuccess(`ลบ “${a.title}” เรียบร้อยแล้ว`)
+      toastSuccess(`ลบ "${a.title}" เรียบร้อยแล้ว`)
       startTransition(() => router.refresh())
     } catch {
       alertError('ลบไม่สำเร็จ')
@@ -44,16 +44,18 @@ export default function AwardGrid({ awards }: { awards: AwardCard[] }) {
           <div className="relative">
             <a href={a.coverFull ?? '#'} target="_blank" rel="noreferrer"
               className="block aspect-[4/3] rounded-t-[inherit] overflow-hidden bg-[#EDF0F6]">
-              {a.cover
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={a.cover} alt={a.title} loading="lazy"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                : <span className="w-full h-full grid place-items-center text-4xl">🏅</span>}
+              {a.cover ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={a.cover} alt={a.title} loading="lazy"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+              ) : (
+                <span className="w-full h-full grid place-items-center text-4xl">🏅</span>
+              )}
             </a>
-            <span className={`absolute top-3 left-3 chip ${CHIP[a.level] ?? 'chip-accent'} shadow-soft`}>🏆 ระดับ{a.level}</span>
+            <span className={`absolute top-3 left-3 chip ${CHIP[a.level] ?? 'chip-accent'} shadow-soft`}>🏅 ระดับ{a.level}</span>
             <div className="absolute top-3 right-3 flex gap-1.5">
               <a className="icon-btn bg-white shadow-soft" href={`/award/${a.id}`} target="_blank" rel="noopener noreferrer"
-                title="ดูหน้าเว็บ" aria-label="ดูหน้าเว็บ">👁️</a>
+                title="ดูหน้าเว็บ" aria-label="ดูหน้าเว็บ">🌐</a>
               <button type="button" className="icon-btn edit shadow-soft" title="แก้ไข" aria-label="แก้ไข"
                 onClick={() => void edit(a.id)}>✏️</button>
               <button type="button" className="icon-btn del shadow-soft" title="ลบ" aria-label="ลบ"
@@ -64,7 +66,8 @@ export default function AwardGrid({ awards }: { awards: AwardCard[] }) {
           <div className="p-5 flex-1 flex flex-col">
             <h3 className="text-[14.5px] font-bold leading-snug line-2">{a.title}</h3>
             <p className="mt-2 text-[12px] text-ink-muted flex items-center gap-x-2 gap-y-1 flex-wrap">
-              {a.awarder && <><span className="inline-flex items-center gap-1">🏛️ {a.awarder}</span><span className="text-ink-faint">·</span></>}
+              {a.awarder && <span className="inline-flex items-center gap-1">🏛️ {a.awarder}</span>}
+              {a.awarder && <span className="text-ink-faint">·</span>}
               <span className="inline-flex items-center gap-1 whitespace-nowrap">📅 {a.dateText}</span>
             </p>
             {a.summary
@@ -72,12 +75,12 @@ export default function AwardGrid({ awards }: { awards: AwardCard[] }) {
               : a.note ? <p className="mt-2 text-[11.5px] text-ink-faint line-2">{a.note}</p> : null}
 
             <div className="mt-auto pt-3 flex flex-wrap items-center gap-1.5">
-              <span className={`chip !text-[10.5px] ${a.images ? 'chip-primary' : 'bg-[color:var(--divider)] text-ink-faint'}`} title="จำนวนรูปภาพ">🖼️ {a.images} รูป</span>
-              <span className={`chip !text-[10.5px] ${a.files ? 'chip-2' : 'bg-[color:var(--divider)] text-ink-faint'}`} title="จำนวนไฟล์แนบ">📎 {a.files} ไฟล์</span>
+              <span className={`chip !text-[10.5px] ${a.images ? 'chip-primary' : 'bg-[color:var(--divider)] text-ink-faint'}`} title="จำนวนรูปภาพ">🖼️ {a.images}</span>
+              <span className={`chip !text-[10.5px] ${a.files ? 'chip-2' : 'bg-[color:var(--divider)] text-ink-faint'}`} title="จำนวนไฟล์เอกสาร">📎 {a.files}</span>
               {a.hasContent && <span className="chip chip-accent !text-[10.5px]" title="มีเนื้อหารายละเอียด">📝 มีรายละเอียด</span>}
-              {a.hasVideo && <span className="chip chip-3 !text-[10.5px]" title="มีวิดีโอ">🎬 วิดีโอ</span>}
+              {a.hasVideo && <span className="chip chip-3 !text-[10.5px]" title="มีวิดีโอ">🎥 วิดีโอ</span>}
               <a href={`/award/${a.id}`} target="_blank" rel="noopener noreferrer"
-                className="btn btn-white btn-sm ml-auto !text-[11.5px]">👁️ ดูหน้าเว็บ</a>
+                className="btn btn-white btn-sm ml-auto !text-[11.5px]">🌐 ดูหน้าเว็บ</a>
             </div>
           </div>
         </article>
