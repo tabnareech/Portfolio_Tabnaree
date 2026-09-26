@@ -1,52 +1,55 @@
 import Link from 'next/link'
-import AdminOnly from '@/components/AdminOnly'
 import { notFound } from 'next/navigation'
 import {
-  getWorkBySlug, getWorkImages, getWorkFiles, getWorks,
-  getRelatedWorks, getWorkNeighbors,
+  getworkBySlug, getworkImages, getworkFiles,
+  getRelatedWorks, getworkNeighbors, getworks
 } from '@/lib/queries'
 import { imageUrl, fileUrl, IMG } from '@/lib/media'
-import { thaiDate, fileIcon, humanSize, excerpt, youtubeId } from '@/lib/theme'
+import { thaiDate, excerpt } from '@/lib/theme'
 import WorkGallery from '@/components/WorkGallery'
 import ShareBar from '@/components/ShareBar'
+import AdminOnly from '@/components/AdminOnly'
 
-/**
- * หน้ารายละเอียดผลงานทั่วไป
- */
+export async function generateStaticParams() {
+  const works = await getworks()
+  return works.map((w) => ({ slug: w.slug }))
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const w = await getWorkBySlug(decodeURIComponent(slug))
-  return {
-    title: w?.title ?? 'ไม่พบผลงาน',
-    description: excerpt(w?.summary || w?.content, 160),
-  }
-}
-
-export async function generateStaticParams() {
-  const works = await getWorks()
-  return works.map((w) => ({ slug: w.slug }))
+  const work = await getworkBySlug(decodeURIComponent(slug))
+  if (!work) return { title: 'ไม่พบผลงาน' }
+  return { title: `${work.title} · พอร์ตโฟลิโอนักวิชาการศึกษา` }
 }
 
 export default async function WorkPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const work = await getWorkBySlug(decodeURIComponent(slug))
+  const work = await getworkBySlug(decodeURIComponent(slug))
   if (!work) notFound()
 
   const [images, files, related, neighbors] = await Promise.all([
-    getWorkImages(work.id),
-    getWorkFiles(work.id),
+    getworkImages(work.id),
+    getworkFiles(work.id),
     getRelatedWorks(work.id, 3),
-    getWorkNeighbors(work.work_date, work.id),
+    getworkNeighbors(work.work_date, work.id),
   ])
 
   const ytId = youtubeId(work.video_url)
   const tags = work.tags ? work.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
   const galleryImages = images.map((im) => ({ id: im.id, source: im.source, ref: im.ref, caption: im.caption }))
 
+  // แมปปิ้งระดับผลงานเป็นไอคอนและข้อความ
+  const levelMap: Record<string, { label: string; icon: string }> = {
+    national: { label: 'ระดับประเทศ', icon: '🌏' },
+    province: { label: 'ระดับจังหวัด', icon: '🏛️' },
+    agency: { label: 'ระดับหน่วยงาน', icon: '🏢' },
+    other: { label: 'ระดับอื่นๆ', icon: '📌' },
+  }
+  const lvl = levelMap[work.level ?? 'agency'] || levelMap.agency
+
   return (
     <main>
-      {/* ================= HERO ================= */}
+      {/* =============================== HERO =============================== */}
       <section className="relative overflow-hidden text-white grad-hero">
         <div className="absolute inset-0 dots opacity-20" />
         <div className="blob w-[360px] h-[360px] !opacity-40 bg-white -right-24 -top-16" />
@@ -55,18 +58,24 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
         <div className="relative max-w-[1240px] mx-auto px-4 md:px-10 pt-8 md:pt-12 pb-10 md:pb-14">
           <nav className="flex flex-wrap items-center gap-1.5 text-[11.5px]" aria-label="breadcrumb">
             <Link href="/" className="chip chip-glass !text-[11px] hover:!bg-white transition">🏠 หน้าแรก</Link>
-            <span className="text-white/70" aria-hidden="true">›</span>
-            <Link href="/development" className="chip chip-glass !text-[11px] hover:!bg-white transition">ผลงานและกิจกรรม</Link>
-            <span className="text-white/70 hidden sm:inline" aria-hidden="true">›</span>
+            <span className="text-white/70" aria-hidden="true">/</span>
+            <Link href="/development" className="chip chip-glass !text-[11px] hover:!bg-white transition">ผลงานและการปฏิบัติงาน</Link>
+            <span className="text-white/70 hidden sm:inline" aria-hidden="true">/</span>
             <b className="hidden sm:inline text-white/90 font-semibold truncate max-w-[260px]">{excerpt(work.title, 40)}</b>
           </nav>
 
           <div className="mt-6 grid lg:grid-cols-[1fr_auto] gap-6 items-end">
             <div className="min-w-0">
+              {/* ป้ายแสดง 3 มิติ (ระดับ, ประเภทงาน, คุณลักษณะ) */}
               <div className="flex flex-wrap gap-2">
-                <span className="chip bg-white/20 backdrop-blur text-white border border-white/30">
-                  📁 ผลงานทั่วไป
+                <span className="chip bg-white text-primary font-extrabold shadow-sm">
+                  {lvl.icon} {lvl.label}
                 </span>
+                {work.work_type && (
+                  <span className="chip bg-white/25 backdrop-blur text-white border border-white/30 font-semibold">
+                    📂 {work.work_type}
+                  </span>
+                )}
                 {work.is_featured === 1 && <span className="chip chip-accent">⭐ ผลงานเด่น</span>}
                 {work.academic_year && (
                   <span className="chip chip-glass">📅 ปี พ.ศ. {work.academic_year}</span>
@@ -76,7 +85,7 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
               <h1 className="mt-4 text-[26px] md:text-[38px] font-extrabold leading-tight tracking-tight drop-shadow-sm">{work.title}</h1>
 
               <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] font-medium text-white/90">
-                <span>🗓️ เผยแพร่ {thaiDate(work.work_date, false)}</span>
+                <span>📅 เผยแพร่ {thaiDate(work.work_date, false)}</span>
                 <span>👁️ {work.view_count.toLocaleString('th-TH')} ครั้ง</span>
                 {images.length > 0 && <span>🖼️ {images.length} รูป</span>}
                 {files.length > 0 && <span>📎 {files.length} ไฟล์</span>}
@@ -88,10 +97,10 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
         </div>
       </section>
 
-      {/* ================= เนื้อหา ================= */}
-      <section className="max-w-[1240px] mx-auto px-4 md:px-10 -mt-6 md:-mt-8 pb-12 relative z-10">
+      {/* =============================== เนื้อหา =============================== */}
+      <section className="max-w-[1240px] mx-auto px-4 md:px-10 mt-6 md:-mt-8 pb-12 relative z-10">
         <div className="grid lg:grid-cols-[1.65fr_.85fr] gap-6 lg:gap-7 items-start">
-
+          
           {/* คอลัมน์ซ้าย */}
           <div className="min-w-0">
             {images.length > 0 ? (
@@ -99,18 +108,18 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
             ) : (
               <div className="w-full rounded-[2rem] overflow-hidden shadow-soft border border-[color:var(--border)] bg-white">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/media/placeholder.svg" alt="ยังไม่มีรูปภาพประกอบ" className="w-full h-auto" width={800} height={500} />
+                <img src="/media/placeholder.svg" alt="ยังไม่มีภาพประกอบ" className="w-full h-auto" width={800} height={500} />
               </div>
             )}
 
             <article className="mt-7 card-soft rounded-[2rem] p-6 md:p-9">
               <div className="flex items-center gap-2.5 mb-5">
-                <span className="w-10 h-10 rounded-2xl grad-bg grid place-items-center text-lg text-white shrink-0">📖</span>
+                <span className="w-10 h-10 rounded-2xl grad-bg grid place-items-center text-lg text-white shrink-0">📄</span>
                 <h2 className="font-extrabold text-[18px] md:text-[20px] leading-tight">รายละเอียด<span className="grad-text">ผลงาน</span></h2>
               </div>
 
               {work.summary && (
-                <p className="text-[14.5px] leading-loose text-ink-soft font-medium mb-6 pb-6 border-b border-dashed border-[color:var(--border)] relative pl-4">
+                <p className="text-[14.5px] leading-loose text-ink-soft font-medium mb-6 pb-6 border-b border-dashed border-[color:var(--border)] relative">
                   <span className="absolute left-0 top-1 bottom-7 w-1 rounded-full grad-bg" aria-hidden="true" />
                   {work.summary}
                 </p>
@@ -126,10 +135,14 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
                     <span className="chip chip-1">▶️ วิดีโอประกอบ</span>
                   </div>
                   <div className="rounded-[1.6rem] overflow-hidden aspect-video bg-ink shadow-soft">
-                    <iframe className="w-full h-full" src={`https://www.youtube-nocookie.com/embed/${ytId}`}
-                      title={`วิดีโอประกอบผลงาน ${work.title}`} loading="lazy"
+                    <iframe
+                      src={`https://www.youtube-nocookie.com/embed/${ytId}`}
+                      title={`วิดีโอประกอบผลงาน ${work.title}`}
+                      loading="lazy"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen />
+                      allowFullScreen
+                      className="w-full h-full"
+                    />
                   </div>
                 </div>
               )}
@@ -151,16 +164,20 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
               </div>
               <dl className="flex flex-col divide-y divide-[color:var(--divider)] text-[12.5px]">
                 <div className="flex justify-between gap-3 py-2.5">
+                  <dt className="text-ink-muted shrink-0">ระดับผลงาน</dt>
+                  <dd className="font-bold text-right">{lvl.icon} {lvl.label}</dd>
+                </div>
+                <div className="flex justify-between gap-3 py-2.5">
+                  <dt className="text-ink-muted shrink-0">ประเภทงาน</dt>
+                  <dd className="font-bold text-right">{work.work_type || '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-3 py-2.5">
                   <dt className="text-ink-muted shrink-0">ปี พ.ศ.</dt>
                   <dd className="font-bold text-right">{work.academic_year || '—'}</dd>
                 </div>
                 <div className="flex justify-between gap-3 py-2.5">
-                  <dt className="text-ink-muted shrink-0">วันที่เผยแพร่</dt>
-                  <dd className="font-bold text-right">{thaiDate(work.work_date)}</dd>
-                </div>
-                <div className="flex justify-between gap-3 py-2.5">
-                  <dt className="text-ink-muted shrink-0">รูปภาพ / ไฟล์</dt>
-                  <dd className="font-bold text-right">{images.length} รูป · {files.length} ไฟล์</dd>
+                  <dt className="text-ink-muted shrink-0">วันที่ดำเนินงาน</dt>
+                  <dd className="font-bold text-right">{thaiDate(work.work_date, false)}</dd>
                 </div>
               </dl>
             </div>
@@ -173,17 +190,20 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
                 </div>
                 <div className="flex flex-col gap-2.5">
                   {files.map((f) => (
-                    <a key={f.id} href={fileUrl(f) ?? '#'} target="_blank" rel="noopener noreferrer"
-                      className="group flex items-center gap-3 p-3 min-h-[44px] rounded-2xl border-2 border-[color:var(--border)] bg-white
-                                 transition hover:border-primary-line hover:bg-primary-soft/40 hover:-translate-y-0.5">
-                      <span className="w-11 h-11 rounded-xl bg-primary-soft grid place-items-center text-lg shrink-0 group-hover:scale-110 transition-transform">{fileIcon(f.mime_type)}</span>
+                    <a
+                      key={f.id}
+                      href={fileUrl(f) ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-center gap-3 p-3 min-h-[44px] rounded-2xl border-2 border-[color:var(--border)] transition hover:border-primary-line hover:bg-primary-soft/40"
+                    >
+                      <span className="w-11 h-11 rounded-xl bg-primary-soft grid place-items-center text-lg shrink-0">📄</span>
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[12.5px] font-bold truncate group-hover:text-primary-deep transition-colors">{f.original_name}</span>
+                        <span className="block text-[12.5px] font-bold truncate group-hover:text-primary-deep">{f.original_name}</span>
                         <span className="block text-[10.5px] text-ink-muted">
-                          {f.source === 'drive' ? 'เปิดใน Google Drive' : humanSize(f.size_bytes)}
+                          {f.source === 'drive' ? 'เปิดใน Google Drive' : 'ไฟล์แนบระบบ'}
                         </span>
                       </span>
-                      <span className="w-8 h-8 rounded-full grad-bg text-white grid place-items-center text-[12px] font-extrabold shrink-0 opacity-80 group-hover:opacity-100 transition" aria-hidden="true">⬇</span>
                     </a>
                   ))}
                 </div>
@@ -193,26 +213,22 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
             {related.length > 0 && (
               <div className="card-soft rounded-[1.8rem] p-5 md:p-6">
                 <div className="flex items-center gap-2.5 mb-4">
-                  <span className="w-9 h-9 rounded-xl bg-coral-soft grid place-items-center text-base shrink-0">💕</span>
+                  <span className="w-9 h-9 rounded-xl bg-coral-soft grid place-items-center text-base shrink-0">🔗</span>
                   <h2 className="font-extrabold text-[15.5px]">ผลงานที่เกี่ยวข้อง</h2>
                 </div>
                 <div className="flex flex-col gap-2">
                   {related.map((r) => (
-                    <Link key={r.id} href={`/work/${r.slug}`}
-                      className="group flex gap-3 items-center p-2 -mx-2 rounded-2xl transition hover:bg-primary-soft/40">
+                    <Link key={r.id} href={`/work/${r.slug}`} className="group flex gap-3 items-center p-2 -mx-2 rounded-2xl transition hover:bg-primary-soft/40">
                       <span className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 bg-[color:var(--divider)]">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={imageUrl({ source: r.cover_source, ref: r.cover_ref }, IMG.thumb)} alt=""
-                          width={128} height={128} loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                        <img src={imageUrl({ source: r.cover_source, ref: r.cover_ref }, IMG.thumb)} alt="" width={128} height={128} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[12.5px] font-bold leading-snug line-2 group-hover:text-primary-deep transition-colors">{r.title}</span>
+                        <span className="block text-[12.5px] font-bold leading-snug line-clamp-2 group-hover:text-primary-deep">{r.title}</span>
                         <span className="mt-1 inline-flex items-center gap-1.5 text-[10.5px] font-bold text-ink-muted">
                           📅 {r.academic_year}
                         </span>
                       </span>
-                      <span className="text-ink-faint group-hover:text-primary-deep group-hover:translate-x-1 transition-all" aria-hidden="true">→</span>
                     </Link>
                   ))}
                 </div>
@@ -220,26 +236,21 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
             )}
 
             {(neighbors.prev || neighbors.next) && (
-              <nav className="flex flex-col gap-3" aria-label="ผลงานอื่น">
+              <nav className="flex flex-col gap-3" aria-label="ผลงานอื่นๆ">
                 {neighbors.prev && (
-                  <Link href={`/work/${neighbors.prev.slug}`}
-                    className="card-pop group flex items-center gap-3.5 !rounded-[1.5rem] px-4 py-3.5 min-h-[44px]">
-                    <span className="w-11 h-11 shrink-0 rounded-full bg-primary-soft text-primary-deep grid place-items-center text-lg font-extrabold transition group-hover:bg-[image:var(--grad)] group-hover:text-white" aria-hidden="true">←</span>
+                  <Link href={`/work/${neighbors.prev.slug}`} className="card-pop group flex items-center gap-3.5 rounded-[1.5rem] px-4 py-3.5">
                     <span className="min-w-0 flex-1">
                       <span className="block text-[10.5px] font-extrabold tracking-[.1em] uppercase text-primary-deep">ผลงานก่อนหน้า</span>
-                      <span className="block text-[13px] font-bold leading-snug line-2 mt-0.5">{neighbors.prev.title}</span>
+                      <span className="block text-[13px] font-bold leading-snug line-clamp-2 mt-0.5">{neighbors.prev.title}</span>
                     </span>
                   </Link>
                 )}
-
                 {neighbors.next && (
-                  <Link href={`/work/${neighbors.next.slug}`}
-                    className="card-pop group flex items-center gap-3.5 !rounded-[1.5rem] px-4 py-3.5 min-h-[44px]">
-                    <span className="min-w-0 flex-1 text-right">
+                  <Link href={`/work/${neighbors.next.slug}`} className="card-pop group flex items-center gap-3.5 rounded-[1.5rem] px-4 py-3.5 text-right">
+                    <span className="min-w-0 flex-1">
                       <span className="block text-[10.5px] font-extrabold tracking-[.1em] uppercase text-primary-deep">ผลงานถัดไป</span>
-                      <span className="block text-[13px] font-bold leading-snug line-2 mt-0.5">{neighbors.next.title}</span>
+                      <span className="block text-[13px] font-bold leading-snug line-clamp-2 mt-0.5">{neighbors.next.title}</span>
                     </span>
-                    <span className="w-11 h-11 shrink-0 rounded-full bg-primary-soft text-primary-deep grid place-items-center text-lg font-extrabold transition group-hover:bg-[image:var(--grad)] group-hover:text-white" aria-hidden="true">→</span>
                   </Link>
                 )}
               </nav>
@@ -251,8 +262,15 @@ export default async function WorkPage({ params }: { params: Promise<{ slug: str
               </Link>
             </AdminOnly>
           </aside>
+
         </div>
       </section>
     </main>
   )
+}
+
+function youtubeId(url: string | null): string | null {
+  if (!url) return null
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
+  return match ? match[1] ?? null : null
 }
