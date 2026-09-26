@@ -11,9 +11,10 @@ interface Draft {
   id: number; period: string; position: string; school: string
   is_current: boolean; sort_order: number
 }
+
 const BLANK: Draft = { id: 0, period: '', position: '', school: '', is_current: false, sort_order: 1 }
 
-/** การ์ด “เส้นทางรับราชการ” พร้อมตารางและโมดัล — ยกมาจาก admin/profile.php */
+/** ก์ด “เส้นทางรับราชการ” พร้อมตารางและโมดูล – ยกมาจาก admin/profile.php */
 export default function CareerSection({ rows }: { rows: CareerPath[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -62,7 +63,7 @@ export default function CareerSection({ rows }: { rows: CareerPath[] }) {
     <section className="mt-4 bg-white rounded-[1.6rem] p-6 shadow-soft border border-[color:var(--border)]">
       <div className="flex justify-between items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2.5">
-          <span className="w-10 h-10 rounded-2xl grid place-items-center text-lg bg-mint-soft shrink-0">🧭</span>
+          <span className="w-10 h-10 rounded-2xl grid place-items-center text-lg bg-mint-soft shrink-0">🏛️</span>
           <div>
             <h2 className="font-bold text-[16px]">เส้นทางรับราชการ</h2>
             <p className="text-[12px] text-ink-muted">{rows.length} รายการ · ติ๊ก “ปัจจุบัน” ให้ตำแหน่งล่าสุด</p>
@@ -74,18 +75,20 @@ export default function CareerSection({ rows }: { rows: CareerPath[] }) {
       {rows.length > 0 ? (
         <div className="overflow-x-auto mt-4">
           <table className="adm-table min-w-[560px] md:min-w-0">
-            <thead><tr><th className="col-no">#</th><th>ช่วงเวลา</th><th>ตำแหน่ง</th><th>สถานศึกษา</th><th>ปัจจุบัน</th><th>จัดการ</th></tr></thead>
+            <thead>
+              <tr><th className="col-no">#</th><th>ช่วงเวลา</th><th>ตำแหน่ง</th><th>หน่วยงาน / สถานศึกษา</th><th>ปัจจุบัน</th><th>จัดการ</th></tr>
+            </thead>
             <tbody>
               {rows.map((c, i) => (
                 <tr key={c.id}>
                   <td className="col-no" data-label="ลำดับ">{i + 1}</td>
                   <td data-label="ช่วงเวลา"><span className="chip chip-primary">{c.period}</span></td>
                   <td data-label="ตำแหน่ง"><b>{c.position}</b></td>
-                  <td data-label="สถานศึกษา" className="text-ink-soft">{c.school}</td>
+                  <td data-label="หน่วยงาน / สถานศึกษา" className="text-ink-soft">{c.school}</td>
                   <td data-label="ปัจจุบัน">
                     {Number(c.is_current) === 1
                       ? <span className="chip chip-2">✅ ปัจจุบัน</span>
-                      : <span className="text-ink-faint">—</span>}
+                      : <span className="text-ink-faint">-</span>}
                   </td>
                   <td data-label="จัดการ">
                     <div className="inline-flex gap-1.5">
@@ -113,26 +116,28 @@ export default function CareerSection({ rows }: { rows: CareerPath[] }) {
             <div className="grid sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="lbl req" htmlFor="c_period">ช่วงเวลา</label>
-                <input className="inp" id="c_period" name="period" required maxLength={60} placeholder="2565 – ปัจจุบัน"
+                <input className="inp" id="c_period" name="period" required maxLength={60} placeholder="เช่น 2565 - ปัจจุบัน"
                   value={d.period} onChange={(e) => set('period', e.target.value)} />
                 <span className="field-error">{err}</span>
               </div>
               <div>
                 <label className="lbl req" htmlFor="c_pos">ตำแหน่ง</label>
-                <input className="inp" id="c_pos" name="position" required maxLength={120} placeholder="ครูชำนาญการ (คศ.2)"
+                <input className="inp" id="c_pos" name="position" required maxLength={120} placeholder="เช่น นักวิชาการศึกษาชำนาญการ"
                   value={d.position} onChange={(e) => set('position', e.target.value)} />
                 <span className="field-error"></span>
               </div>
             </div>
+
             <div className="mb-4">
-              <label className="lbl" htmlFor="c_school">สถานศึกษา</label>
-              <input className="inp" id="c_school" name="school" maxLength={150} placeholder="โรงเรียน…"
+              <label className="lbl" htmlFor="c_school">หน่วยงาน / สถานศึกษา</label>
+              <input className="inp" id="c_school" name="school" maxLength={150} placeholder="เช่น สำนักงานเขตพื้นที่การศึกษา..."
                 value={d.school} onChange={(e) => set('school', e.target.value)} />
               <span className="field-error"></span>
             </div>
+
             <div className="flex items-center gap-3 flex-wrap bg-primary-soft/60 rounded-2xl px-4 py-3">
               <label className="flex items-center gap-2.5 cursor-pointer min-h-[44px]">
-                <input type="checkbox" id="c_cur" name="is_current" value="1"
+                <input type="checkbox" name="is_current" value="1"
                   className="w-5 h-5 rounded accent-[color:var(--primary)]"
                   checked={d.is_current} onChange={(e) => set('is_current', e.target.checked)} />
                 <span className="text-[13px] font-semibold">✅ ตำแหน่งปัจจุบัน</span>
@@ -144,6 +149,7 @@ export default function CareerSection({ rows }: { rows: CareerPath[] }) {
               </label>
             </div>
           </div>
+
           <div className="modal-foot">
             <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>ยกเลิก</button>
             <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'กำลังบันทึก…' : '💾 บันทึก'}</button>
