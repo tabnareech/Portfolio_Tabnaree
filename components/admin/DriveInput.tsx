@@ -5,7 +5,7 @@ import { extractDriveId, imageUrl, IMG, type MediaSource } from '@/lib/media'
 
 /**
  * ช่องแนบรูปจาก Google Drive
- * ครูก๊อบ "ลิงก์แชร์" มาวางได้เลย ระบบดึง FILE ID ให้เอง แล้วโชว์ตัวอย่างทันที
+ * ก๊อป “ลิงก์แชร์” มาวางได้เลย ระบบดึง FILE ID ให้เอง แล้วโชว์ตัวอย่างทันที
  * ส่งค่าออกเป็น 2 ช่อง: <name>_source และ <name>_ref (ตรงกับคอลัมน์ในฐานข้อมูล)
  */
 export default function DriveInput({
@@ -36,7 +36,7 @@ export default function DriveInput({
           <img src={imageUrl({ source: 'static', ref: defaultRef! }, IMG.thumb)} alt=""
             className="w-16 h-16 rounded-lg object-cover shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-[12.5px] font-semibold">ใช้รูปที่มากับเทมเพลต</p>
+            <p className="text-[12.5px] font-semibold">ใช้รูปเดิมที่บันทึกไว้</p>
             <p className="text-[11.5px] text-ink-faint truncate">{defaultRef}</p>
           </div>
           <button type="button" onClick={() => setKeepStatic(false)}
@@ -54,12 +54,12 @@ export default function DriveInput({
           />
           {invalid && (
             <p className="text-[11.5px] text-[#C0392B] mt-1">
-              ไม่พบรหัสไฟล์ในลิงก์นี้ — ก๊อบลิงก์จากปุ่ม “แชร์” ใน Google Drive มาวางอีกครั้ง
+              ไม่พบรหัสไฟล์ในลิงก์ – ก๊อปปี้จากปุ่ม “แชร์” ใน Google Drive มาวางอีกครั้ง
             </p>
           )}
           {id && (
             <div className="mt-2 flex items-center gap-3 p-2.5 rounded-xl border border-[color:var(--primary-line)]"
-                 style={{ background: 'var(--primary-soft)' }}>
+              style={{ background: 'var(--primary-soft)' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={imageUrl({ source: 'drive', ref: id }, IMG.thumb)} alt="ตัวอย่างรูป"
                 className="w-16 h-16 rounded-lg object-cover bg-white shrink-0" />
