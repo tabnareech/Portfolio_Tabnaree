@@ -4,12 +4,10 @@ import { useState } from 'react'
 import { extractDriveId, imageUrl, fileUrl, IMG, type MediaSource } from '@/lib/media'
 
 /**
- * ช่องแนบไฟล์เดี่ยวจาก Google Drive — ครูวางลิงก์แชร์ ระบบดึง FILE ID ให้เอง
+ * ช่องแนบไฟล์เดี่ยวจาก Google Drive – วางลิงก์แชร์ ระบบดึง FILE ID ให้เอง
  * ส่งออก 2 ช่องเหมือน DriveInput: <name>_source และ <name>_ref
- *
- * ไฟล์ที่มากับเทมเพลต (source = static) เอาลิงก์ Drive มาแทนไม่ได้
- * จึงต้องคงค่าเดิมไว้จนกว่าครูจะกดเปลี่ยนเอง ไม่งั้นแค่เปิดฟอร์มแล้วกดบันทึก
- * ไฟล์เดิมก็หายไปทั้งที่ไม่ได้ตั้งใจ
+ * 
+ * ไฟล์ที่มากับระบบ – หากต้องการเปลี่ยนให้วางลิงก์ Drive ใหม่ได้ทันที
  */
 export default function DriveLinkInput({
   name, id, defaultSource, defaultRef, placeholder = 'วางลิงก์แชร์จาก Google Drive ที่นี่', thumb,
@@ -17,7 +15,7 @@ export default function DriveLinkInput({
   name: string; id?: string
   defaultSource?: MediaSource | null; defaultRef?: string | null
   placeholder?: string
-  /** โชว์ภาพย่อของไฟล์เดิม — ใช้เมื่อไฟล์นั้นเป็นรูป */
+  /** โชว์ภาพย่อของไฟล์เดิม – ใช้เมื่อไฟล์นั้นเป็นรูป */
   thumb?: boolean
 }) {
   const wasStatic = defaultSource === 'static' && !!defaultRef
@@ -37,12 +35,12 @@ export default function DriveLinkInput({
       {keepStatic ? (
         <div className="flex items-center gap-3 p-2.5 rounded-xl border border-[color:var(--border)] bg-white">
           {thumb
-            // eslint-disable-next-line @next/next/no-img-element
+            /* eslint-disable-next-line @next/next/no-img-element */
             ? <img src={imageUrl({ source: 'static', ref: defaultRef! }, IMG.thumb)} alt=""
                 className="w-16 h-16 rounded-lg object-cover shrink-0" />
-            : <span className="w-11 h-11 rounded-xl grad-soft grid place-items-center text-lg shrink-0">📄</span>}
+            : <span className="w-11 h-11 rounded-xl grad-soft grid place-items-center text-lg shrink-0">📎</span>}
           <span className="min-w-0 flex-1">
-            <span className="block text-[12.5px] font-semibold">ใช้ไฟล์ที่มากับเทมเพลต</span>
+            <span className="block text-[12.5px] font-semibold">ใช้ไฟล์เดิมที่บันทึกไว้</span>
             <span className="block text-[11.5px] text-ink-faint truncate">{defaultRef}</span>
           </span>
           <a href={fileUrl({ source: 'static', ref: defaultRef! }) ?? '#'} target="_blank" rel="noreferrer"
@@ -55,7 +53,7 @@ export default function DriveLinkInput({
           <input className={`inp${invalid ? ' is-invalid' : ''}`} id={id} value={raw} placeholder={placeholder}
             onChange={(e) => setRaw(e.target.value)} />
           <span className="field-error">
-            {invalid ? 'ไม่พบรหัสไฟล์ในลิงก์นี้ — ก๊อบลิงก์จากปุ่ม “แชร์” ใน Google Drive มาวางอีกครั้ง' : ''}
+            {invalid ? 'ไม่พบรหัสไฟล์ในลิงก์ – ก๊อปปี้จากปุ่ม “แชร์” ใน Google Drive มาวางอีกครั้ง' : ''}
           </span>
           {fileId && (
             <p className="text-[11.5px] text-primary-deep mt-1.5">
