@@ -128,14 +128,16 @@ CREATE TABLE indicators (
 -- ---------------------------------------------------------------------
 CREATE TABLE works (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  indicator_id  INTEGER NOT NULL,
+  indicator_id  INTEGER NULL,
   title         TEXT NOT NULL,
   slug          TEXT NOT NULL,
+  work_level    TEXT NOT NULL DEFAULT 'หน่วยงาน',
+  work_type     TEXT NOT NULL DEFAULT '',
+  role          TEXT NOT NULL DEFAULT '',
   summary       TEXT NOT NULL DEFAULT '',
   content       TEXT NULL,
-  academic_year INTEGER NOT NULL,
-  semester      INTEGER NOT NULL DEFAULT 1,
   work_date     TEXT NULL,
+  location      TEXT NOT NULL DEFAULT '',
   cover_source  TEXT CHECK(cover_source IN ('drive','static')) NULL,
   cover_ref     TEXT NULL,
   video_url     TEXT NOT NULL DEFAULT '',
@@ -148,6 +150,25 @@ CREATE TABLE works (
   deleted_at    TEXT NULL,
   FOREIGN KEY (indicator_id) REFERENCES indicators(id) ON DELETE CASCADE
 );
+
+CREATE TABLE work_criteria (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_id    INTEGER NOT NULL,
+  criterion  TEXT NOT NULL
+    CHECK (
+      criterion IN (
+        'ครองตน',
+        'ครองคน',
+        'ครองงาน',
+        'จริยธรรม'
+      )
+    ),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_wc_work ON work_criteria (work_id);
+CREATE INDEX idx_wc_criterion ON work_criteria (criterion);
 
 CREATE TABLE work_images (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -359,7 +380,6 @@ CREATE UNIQUE INDEX uq_domain_code    ON domains (code);
 CREATE UNIQUE INDEX uq_work_slug      ON works (slug);
 CREATE INDEX idx_ind_domain    ON indicators (domain_id, sort_order);
 CREATE INDEX idx_works_ind     ON works (indicator_id, status, deleted_at);
-CREATE INDEX idx_works_year    ON works (academic_year, deleted_at);
 CREATE INDEX idx_wi_work       ON work_images (work_id, sort_order);
 CREATE INDEX idx_wf_work       ON work_files (work_id, sort_order);
 CREATE INDEX idx_pad_agreement ON pa_details (agreement_id, sort_order);
