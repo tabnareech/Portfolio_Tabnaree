@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { imageUrl, focalPosition, IMG } from '@/lib/media'
-import { initialOf } from '@/lib/theme'
+import { initialof } from '@/lib/theme'
 import type { Profile } from '@/lib/types'
 
-/** แถบบนของหลังบ้าน — แปลงจาก admin/_layout.php (แถบขาว + เส้นรุ้งตัดขอบล่าง) */
+/** แถบบนของหลังบ้าน – แปลงจาก admin/_layout.php (แถบขาว + เส้นตัดขอบล่าง) */
 export default function AdminHeader({ profile, logout }: { profile: Profile | null; logout: () => Promise<void> }) {
-  const initial = initialOf(profile?.full_name ?? '')
+  const initial = initialof(profile?.full_name ?? '')
   const avatar = profile?.avatar_ref
     ? imageUrl({ source: profile.avatar_source, ref: profile.avatar_ref }, IMG.thumb)
     : null
@@ -26,19 +26,19 @@ export default function AdminHeader({ profile, logout }: { profile: Profile | nu
             </span>
             <span className="hidden sm:block leading-tight min-w-0">
               <span className="block font-bold text-[14.5px] text-ink truncate">
-                ระบบหลังบ้าน <span className="text-primary">{profile?.nickname || 'ครู'}</span>
+                ระบบหลังบ้าน <span className="text-primary">{profile?.nickname ?? 'นักวิชาการศึกษา'}</span>
               </span>
-              <span className="block text-[10.5px] text-ink-muted">e-Portfolio · วPA ว9/2564</span>
+              <span className="block text-[10.5px] text-ink-muted">e-Portfolio · ผลงานและการปฏิบัติงาน</span>
             </span>
           </Link>
         </div>
         <div className="flex items-center gap-2">
           <a href="/" target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">
-            👁️ <span className="hidden sm:inline">ดูหน้าเว็บ</span>
+            🌐 <span className="hidden sm:inline">ดูหน้าเว็บ</span>
           </a>
           <form action={logout}>
             <button type="submit" className="btn btn-ghost btn-sm !border-[color:var(--danger)] !text-[color:var(--danger)]">
-              🚪 <span className="hidden sm:inline">ออกจากระบบ</span>
+              <span className="hidden sm:inline">ออกจากระบบ</span>
             </button>
           </form>
         </div>
