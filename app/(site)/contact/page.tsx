@@ -5,13 +5,11 @@ import { imageUrl, IMG } from '@/lib/media'
 export const metadata = { title: 'ติดต่อ' }
 
 /**
- * หน้าติดต่อครู — แปลงมาจาก contact.php ของเว็บ PHP ให้โครงสร้างและข้อความตรงกัน
- *   HERO → การ์ดช่องทางติดต่อ 4 ช่อง → สถานที่ปฏิบัติงาน → แบนเนอร์ CTA
+ * หน้าติดต่อ
  */
 export default async function ContactPage() {
   const profile = await getProfile()
 
-  /* สร้างลิงก์ Facebook / Line จากค่าที่กรอกไว้ (ถ้าเป็น URL ใช้ตรง ๆ ถ้าเป็นชื่อ/ไอดี ประกอบเป็นลิงก์) */
   const linkFrom = (raw: string | undefined, prefix: string): string | null => {
     const v = (raw ?? '').trim()
     if (!v) return null
@@ -19,21 +17,11 @@ export default async function ContactPage() {
     if (/\s/u.test(v)) return null
     return prefix + v.replace(/^[@/]+/, '')
   }
-  /* ลิงก์เพจ — ถ้าช่อง Facebook เป็นชื่อภาษาไทย จะประกอบเป็น URL ที่ใช้จริงไม่ได้
-     กรณีนั้นให้ถอยไปใช้ "ลิงก์ท้ายเว็บ" ที่ครูตั้งไว้ในโปรไฟล์แทน */
-  const footerLink = (profile?.footer_link_url ?? '').trim()
+
   const fbRawInput = (profile?.facebook ?? '').trim()
-  const fbHref =
-    // 1) กรอกเป็นลิงก์เต็มมาแล้ว → ใช้เลย
-    (/^https?:\/\//i.test(fbRawInput) ? fbRawInput : null)
-    // 2) ช่อง Facebook เป็นชื่อเพจ (เช่นภาษาไทย) ประกอบเป็น URL ใช้จริงไม่ได้
-    //    → ใช้ "ลิงก์ท้ายเว็บ" ที่ครูตั้งไว้แทน ถ้าเป็นลิงก์ Facebook
-    ?? (/facebook\.com/i.test(footerLink) ? footerLink : null)
-    // 3) ไม่มีอะไรเลย → เดาจากชื่อผู้ใช้แบบเดิม
-    ?? linkFrom(profile?.facebook, 'https://www.facebook.com/')
+  const fbHref = /^https?:\/\//i.test(fbRawInput) ? fbRawInput : linkFrom(profile?.facebook, 'https://www.facebook.com/')
   const lineHref = linkFrom(profile?.line_id, 'https://line.me/ti/p/~')
 
-  /* ข้อความบนการ์ด — ถ้าค่าที่กรอกเป็น URL ให้ตัดส่วนหัวออกจะได้อ่านง่าย */
   let fbText = fbRawInput || fbHref || ''
   if (/^https?:\/\//i.test(fbText)) {
     fbText = decodeURIComponent(
@@ -41,16 +29,13 @@ export default async function ContactPage() {
     ) || 'Facebook'
   }
 
-  /* [ไอคอน, ป้าย, ค่าที่แสดง, href, gradient ของช่องไอคอน, คำอธิบายสั้น] */
   const cards: [string, string, string, string | null, string, string][] = []
-  if (profile?.email) cards.push(['✉️', 'อีเมล', profile.email, `mailto:${profile.email}`, 'from-coral to-[#2F6FDB]', 'ส่งอีเมลถึงครู'])
+  if (profile?.email) cards.push(['✉️', 'อีเมล', profile.email, `mailto:${profile.email}`, 'from-coral to-[#2F6FDB]', 'ส่งอีเมล'])
   if (profile?.phone) cards.push(['☎️', 'โทรศัพท์', profile.phone, `tel:${profile.phone.replace(/\D/g, '')}`, 'from-mint to-[#E0457B]', 'แตะเพื่อโทร'])
-  if (fbHref) cards.push(['📘', 'Facebook', fbText, fbHref, 'from-sky to-[#1D4ED8]', 'เปิดเพจ Facebook'])
-  if (profile?.line_id) cards.push(['💬', 'Line ID', profile.line_id, lineHref, 'from-sunny to-[#F5C518]', 'เพิ่มเพื่อนใน Line'])
+  if (fbHref) cards.push(['📘', 'Facebook', fbText, fbHref, 'from-sky to-[#1D4ED8]', 'เปิด Facebook'])
+  if (profile?.line_id) cards.push(['💬', 'Line ID', profile.line_id, lineHref, 'from-sunny to-[#F5C518]', 'เพิ่มเพื่อน Line'])
 
-  /* ชื่อเล่นบางคนขึ้นต้นด้วย "ครู" อยู่แล้ว (เช่น "ครูเอ๋") จะได้ไม่กลายเป็น "ครูครูเอ๋" */
-  const nick = (profile?.nickname ?? '').trim() || 'ครู'
-  const contactName = nick.startsWith('ครู') ? nick : `ครู${nick}`
+  const nickname = profile?.nickname ?? 'คุณเทพนรี'
 
   return (
     <main>
@@ -64,7 +49,7 @@ export default async function ContactPage() {
             <div className="ring-grad w-[104px] h-[104px] md:w-[124px] md:h-[124px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={imageUrl({ source: profile?.avatar_source ?? null, ref: profile?.avatar_ref ?? null }, IMG.avatar)}
-                alt={`รูปครู${profile?.nickname ?? ''}`}
+                alt={`รูปโปรไฟล์ ${profile?.full_name ?? ''}`}
                 className="w-full h-full rounded-full object-cover object-top bg-white" />
             </div>
           </div>
@@ -72,14 +57,13 @@ export default async function ContactPage() {
           <div>
             <span className="chip chip-glass mt-6">✉️ ช่องทางติดต่อ</span>
             <h1 className="mt-3 text-[34px] md:text-[52px] font-extrabold leading-[1.08] tracking-tight">
-              ติดต่อ<span className="grad-text">{contactName}</span>
+              ติดต่อ<span className="grad-text">{nickname}</span>
             </h1>
             <p className="mt-3 text-[14px] md:text-[15.5px] text-ink-soft font-medium max-w-[560px] mx-auto">
-              ยินดีแลกเปลี่ยนเรียนรู้ทางวิชาชีพ และให้คำปรึกษาเรื่องสื่อการสอนดิจิทัล
+              ยินดีต้อนรับทุกท่าน สามารถติดต่อสอบถามหรือแลกเปลี่ยนข้อมูลได้ตามช่องทางด้านล่างนี้ครับ
             </p>
             <p className="mt-1.5 text-[13px] text-ink-muted">
-              {profile?.position} วิทยฐานะ{profile?.academic_standing}
-              {profile?.subject_group ? ` · กลุ่มสาระ${profile.subject_group}` : ''}
+              {profile?.position} {profile?.affiliation ? `· ${profile.affiliation}` : ''}
             </p>
           </div>
         </div>
@@ -121,17 +105,14 @@ export default async function ContactPage() {
         )}
 
         {/* สถานที่ปฏิบัติงาน */}
-        {profile?.school && (
+        {profile?.affiliation && (
           <div className="card-soft rounded-[2rem] p-6 md:p-8 mt-5 grid md:grid-cols-[auto_1fr_auto] gap-5 items-center">
-            <span className="w-16 h-16 rounded-[1.4rem] grad-soft grid place-items-center text-[30px] shrink-0 float-slow">🏫</span>
+            <span className="w-16 h-16 rounded-[1.4rem] grad-soft grid place-items-center text-[30px] shrink-0 float-slow">🏛️</span>
             <div className="min-w-0">
-              <span className="chip chip-primary">สถานที่ปฏิบัติงาน</span>
-              <p className="text-[18px] md:text-[20px] font-extrabold mt-2 leading-tight">{profile.school}</p>
-              <p className="text-[13px] text-ink-muted mt-1">
-                {profile.affiliation}{profile.area_office ? ` · ${profile.area_office}` : ''}
-              </p>
+              <span className="chip chip-primary">สังกัด / หน่วยงาน</span>
+              <p className="text-[18px] md:text-[20px] font-extrabold mt-2 leading-tight">{profile.affiliation}</p>
             </div>
-            <Link href="/about" className="btn btn-ghost btn-sm justify-self-start md:justify-self-end">ประวัติครู →</Link>
+            <Link href="/about" className="btn btn-ghost btn-sm justify-self-start md:justify-self-end">เกี่ยวกับฉัน →</Link>
           </div>
         )}
       </section>
@@ -142,14 +123,13 @@ export default async function ContactPage() {
           <div className="absolute inset-0 dots opacity-25" />
           <div className="blob w-[300px] h-[300px] !opacity-40 bg-white -right-20 -bottom-32" />
           <div className="relative">
-            <span className="chip chip-glass !text-ink">อยากดูผลงานทั้งหมดก่อน?</span>
+            <span className="chip chip-glass !text-ink">เยี่ยมชมเว็บไซต์</span>
             <h2 className="mt-3 text-[24px] md:text-[32px] font-extrabold leading-tight">
-              แฟ้มสะสมผลงานตามเกณฑ์ วPA{' '}<br className="hidden md:block" />ครบ 15 ตัวชี้วัด
+              แฟ้มสะสมผลงาน{' '}<br className="hidden md:block" />และข่าวประชาสัมพันธ์
             </h2>
-            <p className="mt-2.5 text-[14px] text-white/90 max-w-[560px]">ข้อตกลงในการพัฒนางาน ผลงาน 3 ด้าน และการพัฒนาตนเองทางวิชาชีพ</p>
+            <p className="mt-2.5 text-[14px] text-white/90 max-w-[560px]">ติดตามผลงานและกิจกรรมต่างๆ ของเราได้ทางหน้าแรก</p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/pa" className="btn btn-white text-[14px]">ข้อตกลง PA · 15 ตัวชี้วัด →</Link>
-              <Link href="/development" className="btn text-[14px] bg-white/15 border-2 border-white/60 text-white hover:bg-white/25">🌱 การพัฒนาตนเอง</Link>
+              <Link href="/" className="btn btn-white text-[14px]">กลับสู่หน้าแรก →</Link>
             </div>
           </div>
           <span className="relative w-[120px] h-[120px] rounded-[2rem] bg-white/20 backdrop-blur grid place-items-center text-[56px] shrink-0 float hidden md:grid">✨</span>
