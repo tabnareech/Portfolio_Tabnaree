@@ -3,15 +3,15 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdmin, logAction } from '@/lib/auth'
 import { db, now, one } from '@/lib/db'
-import { str, int, num, bool, media } from '@/lib/form'
+import { str, int, bool, media } from '@/lib/form'
 
 export type Result = { ok: true; id?: number } | { ok: false; error: string }
 
-/* ---------------- โปรไฟล์ครู ---------------- */
+/* -------------------- โปรไฟล์นักวิชาการศึกษา -------------------- */
 
 /**
  * ลิงก์ท้ายเว็บ — รับเฉพาะ http/https
- * ถ้าพิมพ์มาโดยไม่มี https:// ให้เติมให้ · ถ้าเป็นสคีมอื่น (เช่น javascript:) ตัดทิ้ง
+ * ถ้าพิมพ์มาโดยไม่มี https:// ให้เติมให้ · สคีมอื่น (เช่น javascript:) ตัดทิ้ง
  */
 function footerLinkUrl(f: FormData): string {
   let url = str(f, 'footer_link_url', 255)
@@ -23,23 +23,23 @@ function footerLinkUrl(f: FormData): string {
 }
 
 export async function saveProfile(f: FormData): Promise<Result> {
-  await requireAdmin()                     // ด่านตรวจ — ห้ามตัดออกเด็ดขาด
+  await requireAdmin()   // ด่านตรวจ — ห้ามตัดออกเด็ดขาด
 
   const fullName = str(f, 'full_name', 150)
-  if (!fullName) return { ok: false, error: 'กรุณากรอกชื่อ–สกุล' }
+  if (!fullName) return { ok: false, error: 'กรุณากรอกชื่อ-สกุล' }
 
   const avatar = media(f, 'avatar')
   await db.execute({
-    sql: `UPDATE teacher_profile SET
+    sql: `UPDATE teacher_profile SET 
             full_name=?, nickname=?, position=?, academic_standing=?, subject_group=?,
             school=?, affiliation=?, area_office=?, email=?, phone=?, facebook=?, line_id=?,
             footer_link_url=?, footer_link_label=?,
             avatar_source=?, avatar_ref=?, avatar_focus_x=?, avatar_focus_y=?,
-            motto=?, philosophy=?, bio=?, experience_years=?, teaching_hours=?, updated_at=?
+            motto=?, philosophy=?, bio=?, experience_years=?, updated_at=?
           WHERE id = 1`,
     args: [
       fullName, str(f, 'nickname', 60), str(f, 'position', 100),
-      str(f, 'academic_standing', 100), str(f, 'subject_group', 150),
+      str(f, 'academic_standing', 100), str(f, 'subject_group', 150), // สามารถปรับใช้เป็นกลุ่มงาน/ฝ่าย
       str(f, 'school', 150), str(f, 'affiliation', 150), str(f, 'area_office', 150),
       str(f, 'email', 120), str(f, 'phone', 40), str(f, 'facebook', 150), str(f, 'line_id', 80),
       footerLinkUrl(f), str(f, 'footer_link_label', 60),
@@ -47,7 +47,7 @@ export async function saveProfile(f: FormData): Promise<Result> {
       Math.min(100, Math.max(0, int(f, 'avatar_focus_x', 50))),
       Math.min(100, Math.max(0, int(f, 'avatar_focus_y', 35))),
       str(f, 'motto', 255), str(f, 'philosophy', 255), str(f, 'bio', 4000),
-      Math.min(60, Math.max(0, int(f, 'experience_years'))), num(f, 'teaching_hours'), now(),
+      Math.min(60, Math.max(0, int(f, 'experience_years'))), now(),
     ],
   })
 
@@ -56,7 +56,7 @@ export async function saveProfile(f: FormData): Promise<Result> {
   return { ok: true }
 }
 
-/* ---------------- วุฒิการศึกษา ---------------- */
+/* -------------------- วุฒิการศึกษา -------------------- */
 
 export async function saveEducation(f: FormData): Promise<Result> {
   await requireAdmin()
@@ -75,7 +75,7 @@ export async function saveEducation(f: FormData): Promise<Result> {
     if (!await one('SELECT id FROM educations WHERE id = ? AND deleted_at IS NULL', [id]))
       return { ok: false, error: 'ไม่พบวุฒิการศึกษาที่ต้องการแก้ไข' }
     await db.execute({
-      sql: 'UPDATE educations SET year_th=?, degree=?, institute=?, sort_order=?, updated_at=? WHERE id=?',
+      sql: `UPDATE educations SET year_th=?, degree=?, institute=?, sort_order=?, updated_at=? WHERE id=?`,
       args: [...args, id],
     })
   } else {
@@ -99,7 +99,7 @@ export async function deleteEducation(id: number): Promise<{ ok: boolean; error?
   return { ok: true }
 }
 
-/* ---------------- เส้นทางรับราชการ ---------------- */
+/* -------------------- เส้นทางรับราชการ / การทำงาน -------------------- */
 
 export async function saveCareer(f: FormData): Promise<Result> {
   await requireAdmin()
@@ -118,7 +118,7 @@ export async function saveCareer(f: FormData): Promise<Result> {
       return { ok: false, error: 'ไม่พบรายการที่ต้องการแก้ไข' }
     await db.execute({
       sql: `UPDATE career_paths SET period=?, position=?, school=?, is_current=?, sort_order=?,
-              updated_at=? WHERE id=?`,
+                updated_at=? WHERE id=?`,
       args: [...args, id],
     })
   } else {
