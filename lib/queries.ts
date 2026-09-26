@@ -56,15 +56,20 @@ export async function getWorkCountByIndicator(includeDraft = false): Promise<Map
 
 /* ---------------- ผลงาน ---------------- */
 
-const WORK_SELECT = `SELECT w.*, i.code AS indicator_code, i.name AS indicator_name, d.code AS domain_code
+const WORK_SELECT = `SELECT w.*,
+                     i.code AS indicator_code,
+                     i.name AS indicator_name,
+                     d.code AS domain_code
                      FROM works w
-                     JOIN indicators i ON i.id = w.indicator_id
-                     JOIN domains d ON d.id = i.domain_id`
+                     LEFT JOIN indicators i ON i.id = w.indicator_id
+                     LEFT JOIN domains d ON d.id = i.domain_id`
 
 export interface WorkFilter {
   indicatorId?: number
   domainCode?: number
-  academicYear?: number
+  workLevel?: string
+  workType?: string
+  criterion?: string
   q?: string
   featuredOnly?: boolean
   limit?: number
@@ -76,7 +81,6 @@ export async function getWorks(f: WorkFilter = {}): Promise<Work[]> {
   const args: (string | number)[] = []
   if (f.indicatorId) { where.push('w.indicator_id = ?'); args.push(f.indicatorId) }
   if (f.domainCode) { where.push('d.code = ?'); args.push(f.domainCode) }
-  if (f.academicYear) { where.push('w.academic_year = ?'); args.push(f.academicYear) }
   if (f.featuredOnly) { where.push('w.is_featured = 1') }
   if (f.q) {
     where.push('(w.title LIKE ? OR w.summary LIKE ? OR w.tags LIKE ?)')
@@ -93,7 +97,6 @@ export async function countWorks(f: WorkFilter = {}): Promise<number> {
   const args: (string | number)[] = []
   if (f.indicatorId) { where.push('w.indicator_id = ?'); args.push(f.indicatorId) }
   if (f.domainCode) { where.push('d.code = ?'); args.push(f.domainCode) }
-  if (f.academicYear) { where.push('w.academic_year = ?'); args.push(f.academicYear) }
   if (f.q) {
     where.push('(w.title LIKE ? OR w.summary LIKE ? OR w.tags LIKE ?)')
     const like = `%${f.q}%`; args.push(like, like, like)
@@ -116,9 +119,14 @@ export const getWorkFiles = (workId: number) =>
   all<WorkFile>('SELECT * FROM work_files WHERE work_id = ? ORDER BY sort_order, id', [workId])
 
 export const getAcademicYears = async () =>
-  (await all<{ y: number }>(
-    `SELECT DISTINCT academic_year AS y FROM works
-     WHERE deleted_at IS NULL AND status = 'published' ORDER BY y DESC`)).map((r) => Number(r.y))
+  (await all<{ y: string }>(
+    `SELECT DISTINCT strftime('%Y', work_date) AS y
+     FROM works
+     WHERE deleted_at IS NULL
+       AND status = 'published'
+       AND work_date IS NOT NULL
+     ORDER BY y DESC`
+  )).map((r) => Number(r.y))
 
 /** ผลงานอื่นในตัวชี้วัดเดียวกัน */
 export const getRelatedWorks = (indicatorId: number, exceptId: number, limit = 4) =>
@@ -370,7 +378,6 @@ export async function getWorkPage(opts: {
   if (opts.status) { where.push('w.status = ?'); args.push(opts.status) }
   else if (!opts.includeDraft) where.push("w.status = 'published'")
   if (opts.indicatorId) { where.push('w.indicator_id = ?'); args.push(opts.indicatorId) }
-  if (opts.academicYear) { where.push('w.academic_year = ?'); args.push(opts.academicYear) }
   if (opts.q) {
     where.push('(w.title LIKE ? OR w.summary LIKE ? OR w.tags LIKE ?)')
     const like = `%${opts.q}%`
@@ -545,8 +552,8 @@ export const getWorksAddedThisMonth = async (): Promise<number> => {
 export const getRecentWorksIncludingDraft = (limit = 6) =>
   all<Work>(`SELECT w.*, i.code AS indicator_code, i.name AS indicator_name, d.code AS domain_code
              FROM works w
-             JOIN indicators i ON i.id = w.indicator_id
-             JOIN domains d ON d.id = i.domain_id
+             LEFT JOIN indicators i ON i.id = w.indicator_id
+             LEFT JOIN domains d ON d.id = i.domain_id
              WHERE w.deleted_at IS NULL
              ORDER BY w.work_date DESC, w.id DESC LIMIT ?`, [limit])
 
